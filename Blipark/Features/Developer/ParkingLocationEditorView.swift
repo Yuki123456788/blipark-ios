@@ -5,33 +5,33 @@ struct ParkingLocationEditorView: View {
 
   private let id: UUID
   private let center: GeoCoordinate
+  private let coordinate: GeoCoordinate
+  private let name: String
+  private let address: String?
   private let onSave: (ParkingLocation) -> Void
 
-  @State private var name: String
-  @State private var address: String
   @State private var type: ParkingType
-  @State private var coordinate: GeoCoordinate
   @State private var vehicles: Set<VehicleType>
   @State private var totalSpaceCount: String
   @State private var charge: ParkingCharge
   @State private var pricingSummary: String
   @State private var notes: String
-  @State private var mapLink = ""
-  @State private var showsMap = false
   @State private var errorMessage: String?
 
   init(
     location: ParkingLocation? = nil,
+    selectedDestination: Destination? = nil,
     center: GeoCoordinate,
     onSave: @escaping (ParkingLocation) -> Void
   ) {
+    let selectedCoordinate = location?.coordinate ?? selectedDestination?.coordinate ?? center
     id = location?.id ?? UUID()
     self.center = center
+    coordinate = selectedCoordinate
+    name = location?.name ?? selectedDestination?.name ?? "自訂停車點"
+    address = location?.address ?? selectedDestination?.address
     self.onSave = onSave
-    _name = State(initialValue: location?.name ?? "")
-    _address = State(initialValue: location?.address ?? "")
     _type = State(initialValue: location?.type ?? .parkingLot)
-    _coordinate = State(initialValue: location?.coordinate ?? center)
     _vehicles = State(initialValue: location?.supportedVehicleTypes ?? [.car])
     _totalSpaceCount = State(initialValue: location?.totalSpaceCount.map(String.init) ?? "")
     _charge = State(initialValue: location?.charge ?? .unknown)
@@ -42,34 +42,24 @@ struct ParkingLocationEditorView: View {
   var body: some View {
     NavigationStack {
       Form {
-        Section("基本資料") {
-          TextField("名稱", text: $name)
-          TextField("地址（選填）", text: $address, axis: .vertical)
+        Section("選取位置") {
+          Label(name, systemImage: "mappin.circle.fill")
+            .font(.headline)
+          if let address {
+            Text(address).font(.subheadline).foregroundStyle(.secondary)
+          }
+        }
+
+        Section("停車類型") {
           Picker("類型", selection: $type) {
-            ForEach(ParkingType.allCases) { Text($0.title).tag($0) }
-          }
-          Button("在地圖搜尋或選取", systemImage: "map") { showsMap = true }
-          Text(String(format: "座標 %.6f, %.6f", coordinate.latitude, coordinate.longitude))
-            .font(.caption).foregroundStyle(.secondary)
-        }
-
-        Section {
-          MapLinkImportField(link: $mapLink) { imported in
-            guard ParkingSelectionCoverage.contains(imported.coordinate, centeredAt: center) else {
-              errorMessage = "匯入位置超出目的地周圍 4 × 4 公里的選取範圍。"
-              return
+            ForEach(ParkingType.allCases) { parkingType in
+              Label(parkingType.title, systemImage: parkingType.symbolName).tag(parkingType)
             }
-            name = imported.name
-            address = imported.address ?? ""
-            coordinate = imported.coordinate
           }
-        } header: {
-          Text("從地圖連結匯入")
-        } footer: {
-          Text("支援 Apple Maps 與 Google Maps 完整連結及短連結。")
+          .pickerStyle(.segmented)
         }
 
-        Section("支援車種") {
+        Section("適用車種") {
           ForEach(VehicleType.allCases) { vehicle in
             Toggle(vehicle.title, isOn: vehicleBinding(vehicle))
           }
@@ -85,34 +75,14 @@ struct ParkingLocationEditorView: View {
           TextField("備註（選填）", text: $notes, axis: .vertical)
         }
       }
-      .navigationTitle(name.isEmpty ? "新增停車點" : name)
+      .navigationTitle("設定停車資訊")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
-        ToolbarItem(placement: .confirmationAction) { Button("加入") { save() } }
+        ToolbarItem(placement: .confirmationAction) { Button("確認") { save() } }
         ToolbarItemGroup(placement: .keyboard) {
           Spacer()
-          Button("完成") {
-            UIApplication.shared.sendAction(
-              #selector(UIResponder.resignFirstResponder),
-              to: nil,
-              from: nil,
-              for: nil
-            )
-          }
-        }
-      }
-      .sheet(isPresented: $showsMap) {
-        MapLocationPicker(
-          title: "選擇停車位置",
-          name: name,
-          address: address.nilIfBlank,
-          coordinate: coordinate,
-          coverageCenter: center
-        ) { selectedName, selectedAddress, selectedCoordinate in
-          if !selectedName.isEmpty { name = selectedName }
-          if let selectedAddress { address = selectedAddress }
-          coordinate = selectedCoordinate
+          Button("完成") { dismissKeyboard() }
         }
       }
       .alert("資料有誤", isPresented: errorBinding) {
@@ -137,16 +107,8 @@ struct ParkingLocationEditorView: View {
   }
 
   private func save() {
-    guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-      errorMessage = "請輸入停車點名稱。"
-      return
-    }
-    guard coordinate.isValid else {
-      errorMessage = "座標超出合法範圍。"
-      return
-    }
     guard ParkingSelectionCoverage.contains(coordinate, centeredAt: center) else {
-      errorMessage = "停車點必須位於目的地周圍 4 × 4 公里的選取範圍內。"
+      errorMessage = "停車點超出導航 Snapshot 可用範圍。"
       return
     }
     guard !vehicles.isEmpty else {
@@ -165,8 +127,8 @@ struct ParkingLocationEditorView: View {
     onSave(
       ParkingLocation(
         id: id,
-        name: name.trimmingCharacters(in: .whitespacesAndNewlines),
-        address: address.nilIfBlank,
+        name: name,
+        address: address,
         type: type,
         coordinate: coordinate,
         supportedVehicleTypes: vehicles,
@@ -179,5 +141,13 @@ struct ParkingLocationEditorView: View {
     )
     dismiss()
   }
-}
 
+  private func dismissKeyboard() {
+    UIApplication.shared.sendAction(
+      #selector(UIResponder.resignFirstResponder),
+      to: nil,
+      from: nil,
+      for: nil
+    )
+  }
+}

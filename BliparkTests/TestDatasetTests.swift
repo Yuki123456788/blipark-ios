@@ -31,7 +31,7 @@ final class TestDatasetTests: XCTestCase {
     XCTAssertThrowsError(try TestDatasetValidator.validate(dataset))
   }
 
-  func testSearchProviderReturnsDestinationsAndParkingForEmptyQuery() async throws {
+  func testSearchProviderReturnsOnlyScenarioDestinationsForEmptyQuery() async throws {
     let directory = temporaryDirectory()
     let repository = LocalTestDatasetRepository(directory: directory)
     let dataset = makeDataset()
@@ -40,11 +40,10 @@ final class TestDatasetTests: XCTestCase {
 
     let results = try await provider.searchDestinations(matching: "")
 
-    XCTAssertEqual(results.map(\.name), ["臺南美術館", "美術館停車場"])
-    XCTAssertTrue(results[1].sourceReference?.hasPrefix("local-test-parking:") == true)
+    XCTAssertEqual(results.map(\.name), ["臺南美術館"])
   }
 
-  func testParkingProviderUsesSelectedPointAsCoverageCenter() async throws {
+  func testParkingProviderDoesNotTreatParkingPointAsDestination() async throws {
     let directory = temporaryDirectory()
     let repository = LocalTestDatasetRepository(directory: directory)
     let selected = ParkingLocation(
@@ -69,7 +68,7 @@ final class TestDatasetTests: XCTestCase {
 
     let results = try await provider.parkingLocations(near: selectedAsDestination)
 
-    XCTAssertEqual(results.map(\.name), ["選取停車點", "附近停車點"])
+    XCTAssertTrue(results.isEmpty)
   }
 
   func testRepositoryPersistsDataset() async throws {
@@ -84,6 +83,7 @@ final class TestDatasetTests: XCTestCase {
     XCTAssertEqual(values.map(\.id), [dataset.id])
     XCTAssertEqual(values.first?.destination, dataset.destination)
     XCTAssertEqual(values.first?.parkingLocations, dataset.parkingLocations)
+    XCTAssertEqual(values.first?.displayName, dataset.destination.name)
   }
 
   func testImportRejectsExistingDatasetIDWithoutOverwriting() async throws {

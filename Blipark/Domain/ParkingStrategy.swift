@@ -33,13 +33,33 @@ struct ParkingStrategy: Codable, Hashable, Sendable {
   var preferredParkingTypes: Set<ParkingType>
   var pricingPreference: PricingPreference
   var maximumStraightLineDistanceMeters: Double?
+  /// Width of the destination-centered square used to discover parking information.
+  /// Optional so plans and preferences written before this field was introduced still decode.
+  var informationRangeWidthMeters: Double?
   var sortingPreference: ParkingSortingPreference
+
+  init(
+    vehicleType: VehicleType,
+    preferredParkingTypes: Set<ParkingType>,
+    pricingPreference: PricingPreference,
+    maximumStraightLineDistanceMeters: Double?,
+    informationRangeWidthMeters: Double? = nil,
+    sortingPreference: ParkingSortingPreference
+  ) {
+    self.vehicleType = vehicleType
+    self.preferredParkingTypes = preferredParkingTypes
+    self.pricingPreference = pricingPreference
+    self.maximumStraightLineDistanceMeters = maximumStraightLineDistanceMeters
+    self.informationRangeWidthMeters = informationRangeWidthMeters
+    self.sortingPreference = sortingPreference
+  }
 
   static let standard = ParkingStrategy(
     vehicleType: .car,
     preferredParkingTypes: Set(ParkingType.allCases),
     pricingPreference: .any,
     maximumStraightLineDistanceMeters: 800,
+    informationRangeWidthMeters: nil,
     sortingPreference: .preferenceThenDistance
   )
 }

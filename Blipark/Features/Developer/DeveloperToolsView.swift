@@ -41,8 +41,8 @@ struct DeveloperToolsView: View {
                 Image(systemName: dataset.isEnabled ? "checkmark.circle.fill" : "pause.circle")
                   .foregroundStyle(dataset.isEnabled ? BliparkStyle.accent : .secondary)
                 VStack(alignment: .leading, spacing: 3) {
-                  Text(dataset.destination.name).foregroundStyle(.primary)
-                  Text("\(dataset.parkingLocations.count) 個停車點")
+                  Text(dataset.displayName).foregroundStyle(.primary)
+                  Text("\(dataset.destination.name)・\(dataset.parkingLocations.count) 個停車點")
                     .font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()

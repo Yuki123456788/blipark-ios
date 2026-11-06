@@ -34,7 +34,7 @@ struct DestinationSearchView: View {
             description: Text(
               query.isEmpty
                 ? "請先到開發者工具新增並啟用測試資料情境。"
-                : "目前只會篩選開發者工具中已啟用的目的地與停車點。"
+                : "目前只會篩選開發者工具中已啟用情境的最終目的地。"
             )
           )
         } else {
@@ -48,10 +48,7 @@ struct DestinationSearchView: View {
                   .frame(width: 28)
                 VStack(alignment: .leading, spacing: 3) {
                   Text(destination.name).font(.headline)
-                  Text(resultKind(destination))
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(BliparkStyle.brand)
-                  Text(destination.address ?? coordinateText(destination.coordinate))
+                  Text(destination.address ?? "已儲存的測試目的地")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
@@ -110,20 +107,8 @@ struct DestinationSearchView: View {
     .background(.bar)
   }
 
-  private func isParkingResult(_ destination: Destination) -> Bool {
-    destination.sourceReference?.hasPrefix("local-test-parking:") == true
-  }
-
-  private func resultKind(_ destination: Destination) -> String {
-    isParkingResult(destination) ? "停車點" : "最終目的地"
-  }
-
-  private func resultSymbol(_ destination: Destination) -> String {
-    isParkingResult(destination) ? "parkingsign.circle.fill" : "mappin.and.ellipse"
-  }
-
-  private func coordinateText(_ coordinate: GeoCoordinate) -> String {
-    String(format: "%.5f, %.5f", coordinate.latitude, coordinate.longitude)
+  private func resultSymbol(_: Destination) -> String {
+    "mappin.and.ellipse"
   }
 }
 

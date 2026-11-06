@@ -1,3 +1,4 @@
+import CoreLocation
 import MapKit
 import SwiftUI
 
@@ -5,126 +6,109 @@ struct MapLocationPicker: View {
   @Environment(\.dismiss) private var dismiss
   @StateObject private var searchModel = PlaceSearchModel()
   @State private var query = ""
-  @State private var selection: GeoCoordinate
-  @State private var selectedName: String
-  @State private var selectedAddress: String?
   @State private var camera: MapCameraPosition
-  @State private var selectionError: String?
+  @State private var selectedFeature: MapFeature?
+  @State private var pendingDestination: Destination?
+  @State private var isResolving = false
+  @State private var errorMessage: String?
+  @State private var pressOrigin: CGPoint?
+  @State private var longPressTask: Task<Void, Never>?
+  @State private var resolutionTask: Task<Void, Never>?
 
   let title: String
-  let coverageCenter: GeoCoordinate?
-  let onSelect: (String, String?, GeoCoordinate) -> Void
+  let onSelect: (Destination) -> Void
 
   init(
     title: String,
-    name: String,
-    address: String?,
-    coordinate: GeoCoordinate,
-    coverageCenter: GeoCoordinate? = nil,
-    onSelect: @escaping (String, String?, GeoCoordinate) -> Void
+    destination: Destination?,
+    defaultCoordinate: GeoCoordinate,
+    onSelect: @escaping (Destination) -> Void
   ) {
     self.title = title
-    self.coverageCenter = coverageCenter
-    _selection = State(initialValue: coordinate)
-    _selectedName = State(initialValue: name)
-    _selectedAddress = State(initialValue: address)
+    self.onSelect = onSelect
+    _pendingDestination = State(initialValue: destination)
+    let center = destination?.coordinate ?? defaultCoordinate
     _camera = State(
       initialValue: .region(
         MKCoordinateRegion(
-          center: coordinate.clLocationCoordinate,
-          latitudinalMeters: coverageCenter == nil ? 2_000 : 5_000,
-          longitudinalMeters: coverageCenter == nil ? 2_000 : 5_000
+          center: center.clLocationCoordinate,
+          latitudinalMeters: destination == nil ? 8_000 : 1_200,
+          longitudinalMeters: destination == nil ? 8_000 : 1_200
         )
       )
     )
-    self.onSelect = onSelect
   }
 
   var body: some View {
     NavigationStack {
       VStack(spacing: 0) {
         searchPanel
-        MapReader { proxy in
-          Map(position: $camera) {
-            if let coverageCenter {
-              MapPolyline(coordinates: ParkingSelectionCoverage.boundaryCoordinates(centeredAt: coverageCenter))
-                .stroke(
-                  BliparkStyle.brand,
-                  style: StrokeStyle(lineWidth: 2, dash: [7, 5])
-                )
-            }
-            Marker(selectedName.isEmpty ? "選取位置" : selectedName, coordinate: selection.clLocationCoordinate)
-              .tint(BliparkStyle.brand)
-          }
-          .mapControls {
-            MapCompass()
-            MapScaleView()
-          }
-          .onTapGesture { point in
-            guard let coordinate = proxy.convert(point, from: .local) else { return }
-            let value = GeoCoordinate(latitude: coordinate.latitude, longitude: coordinate.longitude)
-            guard isInsideCoverage(value) else {
-              selectionError = "停車點必須位於目的地周圍 4 × 4 公里的方框內。"
-              return
-            }
-            selection = value
-            selectedAddress = nil
-            selectionError = nil
-          }
-        }
-      }
-      .safeAreaInset(edge: .bottom) {
-        VStack(alignment: .leading, spacing: 4) {
-          Text(selectedName.isEmpty ? "自訂位置" : selectedName)
-            .font(.headline)
-          Text(selectedAddress ?? coordinateText)
-            .font(.caption)
-            .foregroundStyle(.secondary)
-          if let selectionError {
-            Text(selectionError).font(.caption).foregroundStyle(.red)
-          } else if coverageCenter != nil {
-            Text("虛線範圍為目的地周圍 4 × 4 公里")
-              .font(.caption).foregroundStyle(.secondary)
-          }
-          Button("使用這個位置") {
-            onSelect(selectedName, selectedAddress, selection)
-            dismiss()
-          }
-          .buttonStyle(.borderedProminent)
-          .frame(maxWidth: .infinity, alignment: .trailing)
-          .disabled(!isInsideCoverage(selection))
-        }
-        .padding()
-        .background(.regularMaterial)
+        locationMap
       }
       .navigationTitle(title)
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
-        ToolbarItem(placement: .cancellationAction) {
-          Button("取消") { dismiss() }
-        }
+        ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
         ToolbarItemGroup(placement: .keyboard) {
           Spacer()
-          Button("完成") {
-            UIApplication.shared.sendAction(
-              #selector(UIResponder.resignFirstResponder),
-              to: nil,
-              from: nil,
-              for: nil
-            )
-          }
+          Button("完成") { dismissKeyboard() }
         }
       }
+    }
+    .onDisappear {
+      longPressTask?.cancel()
+      resolutionTask?.cancel()
+    }
+  }
+
+  private var locationMap: some View {
+    MapReader { proxy in
+      Map(
+        position: $camera,
+        interactionModes: [.pan, .zoom],
+        selection: $selectedFeature
+      ) {
+        if let pendingDestination {
+          Marker(
+            pendingDestination.name,
+            systemImage: "mappin.circle.fill",
+            coordinate: pendingDestination.coordinate.clLocationCoordinate
+          )
+          .tint(BliparkStyle.brand)
+        }
+      }
+      .mapStyle(.standard(elevation: .realistic, pointsOfInterest: .all))
+      .mapControls {
+        MapCompass()
+        MapScaleView()
+      }
+      .simultaneousGesture(longPressGesture(proxy: proxy))
+      .onChange(of: selectedFeature) { _, feature in
+        guard let feature else { return }
+        resolve(feature: feature)
+      }
+      .overlay(alignment: .topLeading) {
+        Label("點地標・長按放圖釘", systemImage: "hand.tap.fill")
+          .font(.caption.weight(.semibold))
+          .padding(.horizontal, 10)
+          .padding(.vertical, 7)
+          .background(.regularMaterial, in: Capsule())
+          .padding(10)
+      }
+      .overlay(alignment: .bottom) { selectionCard }
     }
   }
 
   private var searchPanel: some View {
     VStack(spacing: 8) {
       HStack {
-        TextField("搜尋地點或地址", text: $query)
+        TextField("搜尋地標或地址", text: $query)
           .textFieldStyle(.roundedBorder)
           .submitLabel(.search)
-          .onSubmit { Task { await searchModel.search(query, near: selection) } }
+          .onSubmit {
+            dismissKeyboard()
+            Task { await searchModel.search(query, near: pendingDestination?.coordinate ?? .tainanCenter) }
+          }
         if searchModel.isSearching { ProgressView() }
       }
       if let error = searchModel.errorMessage {
@@ -135,25 +119,20 @@ struct MapLocationPicker: View {
           HStack {
             ForEach(searchModel.results) { result in
               Button {
-                guard isInsideCoverage(result.coordinate) else {
-                  selectionError = "這個地點超出目的地周圍 4 × 4 公里的方框。"
-                  return
-                }
-                selectedName = result.name
-                selectedAddress = result.address
-                selection = result.coordinate
-                selectionError = nil
-                camera = .region(
-                  MKCoordinateRegion(
-                    center: result.coordinate.clLocationCoordinate,
-                    latitudinalMeters: 1_200,
-                    longitudinalMeters: 1_200
+                select(
+                  Destination(
+                    name: result.name,
+                    address: result.address,
+                    coordinate: result.coordinate,
+                    sourceReference: "mapkit-search"
                   )
                 )
               } label: {
                 VStack(alignment: .leading, spacing: 2) {
                   Text(result.name).font(.subheadline.weight(.medium)).lineLimit(1)
-                  Text(result.address ?? "地址未提供").font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                  if let address = result.address {
+                    Text(address).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                  }
                 }
                 .padding(10)
                 .frame(width: 220, alignment: .leading)
@@ -169,13 +148,192 @@ struct MapLocationPicker: View {
     .background(Color(.systemGroupedBackground))
   }
 
-  private var coordinateText: String {
-    String(format: "%.6f, %.6f", selection.latitude, selection.longitude)
+  @ViewBuilder
+  private var selectionCard: some View {
+    if let pendingDestination {
+      VStack(alignment: .leading, spacing: 7) {
+        Label(pendingDestination.name, systemImage: "mappin.circle.fill")
+          .font(.subheadline.weight(.semibold))
+          .lineLimit(1)
+        if let address = pendingDestination.address {
+          Text(address)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .lineLimit(2)
+        }
+        HStack {
+          Button("使用這個目的地", systemImage: "checkmark.circle.fill") {
+            onSelect(pendingDestination)
+            dismiss()
+          }
+          .buttonStyle(.borderedProminent)
+          Button("取消選取") {
+            self.pendingDestination = nil
+            selectedFeature = nil
+          }
+          .buttonStyle(.bordered)
+        }
+      }
+      .padding(12)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+      .padding(10)
+    } else if isResolving {
+      HStack(spacing: 8) {
+        ProgressView()
+        Text("正在取得地點資訊…").font(.footnote.weight(.medium))
+      }
+      .padding(.horizontal, 12)
+      .padding(.vertical, 9)
+      .background(.regularMaterial, in: Capsule())
+      .padding(10)
+    } else if let errorMessage {
+      Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+        .font(.caption)
+        .foregroundStyle(.red)
+        .padding(10)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+        .padding(10)
+    }
   }
 
-  private func isInsideCoverage(_ coordinate: GeoCoordinate) -> Bool {
-    guard let coverageCenter else { return true }
-    return ParkingSelectionCoverage.contains(coordinate, centeredAt: coverageCenter)
+  private func longPressGesture(proxy: MapProxy) -> some Gesture {
+    DragGesture(minimumDistance: 0, coordinateSpace: .local)
+      .onChanged { value in
+        if pressOrigin == nil {
+          pressOrigin = value.startLocation
+          longPressTask?.cancel()
+          longPressTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(550))
+            guard !Task.isCancelled, let pressOrigin,
+              let coordinate = proxy.convert(pressOrigin, from: .local)
+            else { return }
+            resolve(coordinate: coordinate)
+          }
+        }
+        guard let pressOrigin else { return }
+        let movement = hypot(
+          value.location.x - pressOrigin.x,
+          value.location.y - pressOrigin.y
+        )
+        if movement > 12 {
+          longPressTask?.cancel()
+          longPressTask = nil
+          self.pressOrigin = nil
+        }
+      }
+      .onEnded { _ in
+        longPressTask?.cancel()
+        longPressTask = nil
+        pressOrigin = nil
+      }
+  }
+
+  private func resolve(feature: MapFeature) {
+    resolutionTask?.cancel()
+    isResolving = true
+    errorMessage = nil
+    resolutionTask = Task { @MainActor in
+      if #available(iOS 18.0, *),
+        let item = try? await MKMapItemRequest(feature: feature).mapItem
+      {
+        guard !Task.isCancelled else { return }
+        select(Destination(mapItem: item))
+      } else {
+        select(
+          Destination(
+            name: feature.title ?? "地圖上的地點",
+            coordinate: GeoCoordinate(
+              latitude: feature.coordinate.latitude,
+              longitude: feature.coordinate.longitude
+            ),
+            sourceReference: "map-feature"
+          )
+        )
+      }
+      isResolving = false
+    }
+  }
+
+  private func resolve(coordinate: CLLocationCoordinate2D) {
+    guard CLLocationCoordinate2DIsValid(coordinate) else { return }
+    selectedFeature = nil
+    resolutionTask?.cancel()
+    isResolving = true
+    errorMessage = nil
+    resolutionTask = Task { @MainActor in
+      do {
+        let placemark = try await CLGeocoder()
+          .reverseGeocodeLocation(CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude))
+          .first
+        try Task.checkCancellation()
+        select(
+          Destination(
+            name: placemark?.name ?? "自訂位置",
+            address: address(from: placemark),
+            coordinate: GeoCoordinate(latitude: coordinate.latitude, longitude: coordinate.longitude),
+            sourceReference: "map-long-press"
+          )
+        )
+      } catch is CancellationError {
+        return
+      } catch {
+        select(
+          Destination(
+            name: "自訂位置",
+            coordinate: GeoCoordinate(latitude: coordinate.latitude, longitude: coordinate.longitude),
+            sourceReference: "map-long-press"
+          )
+        )
+      }
+      isResolving = false
+    }
+  }
+
+  private func select(_ destination: Destination) {
+    pendingDestination = destination
+    errorMessage = nil
+    isResolving = false
+    camera = .region(
+      MKCoordinateRegion(
+        center: destination.coordinate.clLocationCoordinate,
+        latitudinalMeters: 1_200,
+        longitudinalMeters: 1_200
+      )
+    )
+  }
+
+  private func address(from placemark: CLPlacemark?) -> String? {
+    guard let placemark else { return nil }
+    let parts = [placemark.administrativeArea, placemark.locality, placemark.subLocality, placemark.thoroughfare]
+      .compactMap { $0?.nilIfBlank }
+    return parts.isEmpty ? nil : parts.joined()
+  }
+
+  private func dismissKeyboard() {
+    UIApplication.shared.sendAction(
+      #selector(UIResponder.resignFirstResponder),
+      to: nil,
+      from: nil,
+      for: nil
+    )
   }
 }
 
+extension Destination {
+  init(mapItem: MKMapItem) {
+    self.init(
+      name: mapItem.name?.nilIfBlank ?? "未命名地點",
+      address: mapItem.placemark.title?.nilIfBlank,
+      coordinate: GeoCoordinate(
+        latitude: mapItem.placemark.coordinate.latitude,
+        longitude: mapItem.placemark.coordinate.longitude
+      ),
+      sourceReference: "mapkit"
+    )
+  }
+}
+
+extension GeoCoordinate {
+  static let tainanCenter = GeoCoordinate(latitude: 22.9910, longitude: 120.2040)
+}

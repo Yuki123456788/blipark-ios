@@ -2,6 +2,7 @@ import SwiftUI
 
 struct MapLinkImportField: View {
   @Binding var link: String
+  var prompt = "貼上 Apple Maps 或 Google Maps 連結"
   let onImport: (Destination) -> Void
 
   @State private var isImporting = false
@@ -11,7 +12,7 @@ struct MapLinkImportField: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
       HStack(spacing: 8) {
-        TextField("貼上 Apple Maps 或 Google Maps 連結", text: $link)
+        TextField(prompt, text: $link)
           .textInputAutocapitalization(.never)
           .autocorrectionDisabled()
           .keyboardType(.URL)

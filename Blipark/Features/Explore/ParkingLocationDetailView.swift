@@ -8,6 +8,9 @@ struct ParkingLocationDetailView: View {
   var body: some View {
     NavigationStack {
       List {
+        ParkingStreetViewPlaceholder(locationName: item.location.name, height: 190)
+          .listRowInsets(EdgeInsets())
+
         if let coordinate = item.location.coordinate {
           Map(initialPosition: .region(
             MKCoordinateRegion(

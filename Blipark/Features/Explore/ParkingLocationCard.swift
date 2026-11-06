@@ -2,7 +2,9 @@ import SwiftUI
 
 struct ParkingLocationCard: View {
   let item: ExploredParkingLocation
-  let isSelected: Bool
+  let selectionOrder: Int?
+
+  private var isSelected: Bool { selectionOrder != nil }
 
   var body: some View {
     HStack(alignment: .top, spacing: 12) {
@@ -29,9 +31,18 @@ struct ParkingLocationCard: View {
         }
       }
       Spacer(minLength: 4)
-      Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-        .font(.title3)
-        .foregroundStyle(isSelected ? BliparkStyle.brand : Color.secondary.opacity(0.45))
+      if let selectionOrder {
+        Text("\(selectionOrder)")
+          .font(.caption.bold())
+          .foregroundStyle(.white)
+          .frame(width: 26, height: 26)
+          .background(BliparkStyle.brand, in: Circle())
+          .accessibilityLabel("第 \(selectionOrder) 順位")
+      } else {
+        Image(systemName: "plus.circle")
+          .font(.title3)
+          .foregroundStyle(Color.secondary.opacity(0.55))
+      }
     }
     .padding(14)
     .background(.background, in: RoundedRectangle(cornerRadius: 16))

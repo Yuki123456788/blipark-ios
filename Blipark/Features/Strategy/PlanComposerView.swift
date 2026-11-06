@@ -3,12 +3,15 @@ import SwiftUI
 struct PlanComposerView: View {
   @Environment(\.dismiss) private var dismiss
   @StateObject private var model: PlanComposerModel
+  private let showsStrategyEditor: Bool
   private let onSaved: (ParkingPlan) -> Void
 
   init(
     destination: Destination,
     knownLocations: [ParkingLocation],
     initiallySelectedLocationIDs: [UUID] = [],
+    initialStrategy: ParkingStrategy? = nil,
+    showsStrategyEditor: Bool = true,
     existingPlan: ParkingPlan? = nil,
     parkingProvider: any ParkingDataProviding,
     preferencesRepository: any PreferencesRepository,
@@ -20,12 +23,14 @@ struct PlanComposerView: View {
         destination: destination,
         knownLocations: knownLocations,
         initiallySelectedLocationIDs: initiallySelectedLocationIDs,
+        initialStrategy: initialStrategy,
         existingPlan: existingPlan,
         parkingProvider: parkingProvider,
         preferencesRepository: preferencesRepository,
         planRepository: planRepository
       )
     )
+    self.showsStrategyEditor = showsStrategyEditor
     self.onSaved = onSaved
   }
 
@@ -44,11 +49,11 @@ struct PlanComposerView: View {
           }
         }
 
-        strategySection
+        if showsStrategyEditor { strategySection }
         selectedCandidatesSection
-        availableCandidatesSection
+        if showsStrategyEditor { availableCandidatesSection }
       }
-      .navigationTitle("停車策略與候選")
+      .navigationTitle(showsStrategyEditor ? "停車策略與候選" : "儲存停車計畫")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
@@ -92,6 +97,12 @@ struct PlanComposerView: View {
         Text("直線 1,200 m 內").tag(Optional(1_200.0))
         Text("不限").tag(Optional<Double>.none)
       }
+      Picker("停車資訊範圍", selection: $model.strategy.informationRangeWidthMeters) {
+        Text("1 × 1 km").tag(Optional(1_000.0))
+        Text("2 × 2 km").tag(Optional(2_000.0))
+        Text("3 × 3 km").tag(Optional(3_000.0))
+        Text("4 × 4 km").tag(Optional(4_000.0))
+      }
     } header: {
       Text("本次停車策略")
     } footer: {
@@ -104,22 +115,33 @@ struct PlanComposerView: View {
       if model.selectedLocations.isEmpty {
         Text("尚未選擇候選停車點").foregroundStyle(.secondary)
       } else {
-        ForEach(model.selectedLocations) { location in
+        ForEach(Array(model.selectedLocations.enumerated()), id: \.element.id) { index, location in
           HStack {
-            Image(systemName: "checkmark.circle.fill")
-              .foregroundStyle(BliparkStyle.brand)
+            Text("\(index + 1)")
+              .font(.caption.bold())
+              .foregroundStyle(.white)
+              .frame(width: 24, height: 24)
+              .background(BliparkStyle.brand, in: Circle())
             VStack(alignment: .leading) {
               Text(location.name)
               Text(distanceText(location)).font(.caption).foregroundStyle(.secondary)
             }
+            Spacer()
+            if showsStrategyEditor {
+              Button(role: .destructive) {
+                model.selectedLocationIDs.removeAll { $0 == location.id }
+              } label: {
+                Image(systemName: "xmark.circle")
+              }
+              .buttonStyle(.borderless)
+            }
           }
         }
-        .onDelete(perform: model.remove)
       }
     } header: {
       Text("已選停車點")
     } footer: {
-      Text("這裡不代表推薦排名或引導順序。")
+      Text("此順序會作為停車候選的嘗試順序。")
     }
   }
 

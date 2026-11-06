@@ -5,6 +5,7 @@ struct TestDataset: Codable, Hashable, Identifiable, Sendable {
 
   let id: UUID
   var schemaVersion: Int
+  var name: String?
   var destination: Destination
   var parkingLocations: [ParkingLocation]
   var notes: String?
@@ -15,6 +16,7 @@ struct TestDataset: Codable, Hashable, Identifiable, Sendable {
   init(
     id: UUID = UUID(),
     schemaVersion: Int = currentSchemaVersion,
+    name: String? = nil,
     destination: Destination,
     parkingLocations: [ParkingLocation] = [],
     notes: String? = nil,
@@ -24,12 +26,17 @@ struct TestDataset: Codable, Hashable, Identifiable, Sendable {
   ) {
     self.id = id
     self.schemaVersion = schemaVersion
+    self.name = name
     self.destination = destination
     self.parkingLocations = parkingLocations
     self.notes = notes
     self.isEnabled = isEnabled
     self.createdAt = createdAt
     self.updatedAt = updatedAt
+  }
+
+  var displayName: String {
+    name?.nilIfBlank ?? destination.name
   }
 }
 
@@ -49,6 +56,11 @@ enum TestDatasetValidator {
   static func validate(_ dataset: TestDataset) throws {
     guard dataset.schemaVersion == TestDataset.currentSchemaVersion else {
       throw RepositoryError.invalidData("不支援的測試資料版本：\(dataset.schemaVersion)。")
+    }
+    if let name = dataset.name {
+      guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        throw RepositoryError.invalidData("測試情境名稱不可留白。")
+      }
     }
     guard !dataset.destination.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
       throw RepositoryError.invalidData("目的地名稱不可留白。")

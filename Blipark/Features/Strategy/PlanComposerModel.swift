@@ -17,12 +17,14 @@ final class PlanComposerModel: ObservableObject {
   private let parkingProvider: any ParkingDataProviding
   private let preferencesRepository: any PreferencesRepository
   private let planRepository: any PlanRepository
+  private let hasInitialStrategy: Bool
   private var globalStrategy = ParkingStrategy.standard
 
   init(
     destination: Destination,
     knownLocations: [ParkingLocation],
     initiallySelectedLocationIDs: [UUID] = [],
+    initialStrategy: ParkingStrategy? = nil,
     existingPlan: ParkingPlan? = nil,
     parkingProvider: any ParkingDataProviding,
     preferencesRepository: any PreferencesRepository,
@@ -33,8 +35,9 @@ final class PlanComposerModel: ObservableObject {
     self.parkingProvider = parkingProvider
     self.preferencesRepository = preferencesRepository
     self.planRepository = planRepository
+    hasInitialStrategy = initialStrategy != nil
     planName = existingPlan?.name ?? destination.name
-    strategy = existingPlan?.strategy ?? .standard
+    strategy = existingPlan?.strategy ?? initialStrategy ?? .standard
     hasScheduledDeparture = existingPlan?.scheduledDepartureAt != nil
     scheduledDepartureAt = existingPlan?.scheduledDepartureAt ?? .now.addingTimeInterval(3_600)
 
@@ -66,7 +69,13 @@ final class PlanComposerModel: ObservableObject {
     do {
       let preferences = try await preferencesRepository.preferences()
       globalStrategy = preferences.globalParkingStrategy
-      if existingPlan == nil { strategy = globalStrategy }
+      if globalStrategy.informationRangeWidthMeters == nil {
+        globalStrategy.informationRangeWidthMeters = preferences.guidanceTriggerDistanceMeters
+      }
+      if existingPlan == nil && !hasInitialStrategy { strategy = globalStrategy }
+      if strategy.informationRangeWidthMeters == nil {
+        strategy.informationRangeWidthMeters = preferences.guidanceTriggerDistanceMeters
+      }
 
       let currentLocations = try await parkingProvider.parkingLocations(near: destination)
       for location in currentLocations where !availableLocations.contains(where: { $0.id == location.id }) {

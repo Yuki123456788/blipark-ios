@@ -49,7 +49,7 @@ final class SearchAndExploreTests: XCTestCase {
   }
 
   @MainActor
-  func testExplorePreservesProviderOrderAndWaitsForManualSelection() async {
+  func testExplorePreservesDatasetOrderAndWaitsForManualSelection() async {
     let destination = Destination(name: "目的地", coordinate: coordinate)
     let near = ParkingLocation(
       name: "近路邊",
@@ -59,22 +59,52 @@ final class SearchAndExploreTests: XCTestCase {
     let far = ParkingLocation(
       name: "遠停車場",
       type: .parkingLot,
-      coordinate: GeoCoordinate(latitude: 23.0010, longitude: 120.1996)
+      coordinate: GeoCoordinate(latitude: 22.9980, longitude: 120.1996)
     )
     let model = DestinationExploreModel(
       destination: destination,
       provider: FixedParkingProvider(locations: [far, near])
     )
 
-    await model.load()
+    await model.load(preferencesRepository: FixedPreferencesRepository())
 
     XCTAssertEqual(model.visibleLocations.map(\.location.name), ["遠停車場", "近路邊"])
-    XCTAssertNil(model.selectedID)
+    XCTAssertTrue(model.selectedLocationIDs.isEmpty)
+    XCTAssertEqual(model.explorationAreaWidthMeters, 2_000)
+  }
+
+  @MainActor
+  func testExploreRangeUsesSelectedSquareWidth() async {
+    let destination = Destination(name: "目的地", coordinate: coordinate)
+    let insideOneKilometerSquare = ParkingLocation(
+      name: "範圍內",
+      type: .parkingLot,
+      coordinate: GeoCoordinate(latitude: 22.9940, longitude: 120.1996)
+    )
+    let outsideOneKilometerSquare = ParkingLocation(
+      name: "範圍外",
+      type: .parkingLot,
+      coordinate: GeoCoordinate(latitude: 22.9970, longitude: 120.1996)
+    )
+    let model = DestinationExploreModel(
+      destination: destination,
+      provider: FixedParkingProvider(locations: [insideOneKilometerSquare, outsideOneKilometerSquare])
+    )
+    await model.load(preferencesRepository: FixedPreferencesRepository())
+
+    model.strategy.informationRangeWidthMeters = 1_000
+
+    XCTAssertEqual(model.visibleLocations.map(\.location.name), ["範圍內"])
   }
 
   private var coordinate: GeoCoordinate {
     GeoCoordinate(latitude: 22.9908, longitude: 120.1996)
   }
+}
+
+private struct FixedPreferencesRepository: PreferencesRepository {
+  func preferences() async throws -> AppPreferences { .standard }
+  func save(_ preferences: AppPreferences) async throws {}
 }
 
 private struct FixedParkingProvider: ParkingDataProviding {

@@ -36,5 +36,23 @@ final class DomainModelTests: XCTestCase {
     XCTAssertEqual(snapshot.name, location.name)
     XCTAssertEqual(snapshot.totalSpaceCount, 30)
   }
+
+  func testParkingStrategyDecodesDataWrittenBeforeInformationRangeWasAdded() throws {
+    let data = try XCTUnwrap(
+      """
+      {
+        "vehicleType": "car",
+        "preferredParkingTypes": ["parkingLot", "onStreet"],
+        "pricingPreference": "any",
+        "maximumStraightLineDistanceMeters": 800,
+        "sortingPreference": "preferenceThenDistance"
+      }
+      """.data(using: .utf8)
+    )
+
+    let strategy = try JSONDecoder().decode(ParkingStrategy.self, from: data)
+
+    XCTAssertNil(strategy.informationRangeWidthMeters)
+  }
 }
 
