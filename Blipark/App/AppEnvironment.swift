@@ -12,7 +12,10 @@ struct AppEnvironment: Sendable {
   static func live(directory: URL = BliparkStorageDirectory.applicationSupport()) -> AppEnvironment {
     let testDatasets = LocalTestDatasetRepository(directory: directory)
     return AppEnvironment(
-      destinationSearch: TestDatasetDestinationSearchProvider(repository: testDatasets),
+      destinationSearch: CompositeDestinationSearchProvider(
+        preferred: TestDatasetDestinationSearchProvider(repository: testDatasets),
+        fallback: MapKitDestinationSearchProvider()
+      ),
       parkingData: TestDatasetParkingDataProvider(repository: testDatasets),
       plans: LocalPlanRepository(directory: directory),
       preferences: LocalPreferencesRepository(directory: directory),

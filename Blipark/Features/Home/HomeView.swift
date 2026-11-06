@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct HomeView: View {
+  @Environment(\.appEnvironment) private var environment
   let onShowPlans: () -> Void
 
   var body: some View {
@@ -30,10 +31,9 @@ struct HomeView: View {
           Text("準備去哪裡？")
             .font(.headline)
           NavigationLink {
-            ContentUnavailableView(
-              "目的地搜尋即將接上",
-              systemImage: "magnifyingglass",
-              description: Text("搜尋流程會透過可替換的資料 Provider 提供結果。")
+            DestinationSearchView(
+              destinationProvider: environment.destinationSearch,
+              parkingProvider: environment.parkingData
             )
           } label: {
             Label("搜尋地點、地址或貼上連結", systemImage: "magnifyingglass")

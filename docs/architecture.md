@@ -30,3 +30,5 @@ Debug build 可從「我的 → 開發者工具」建立、編輯、啟用、停
 
 導航實測參數另存於 `developer-navigation-v1.json`。依目前決策，預設使用 5×5 圖磚、80 公尺固定觀察距離與 PiP controls style 2；這些設定不會出現在一般使用者操作介面。
 
+正式搜尋會先查詢啟用的 TestDataset，再補上 MapKit 一般地點結果並依名稱與座標去重。測試目的地的 UUID 是持久化識別；正式畫面不顯示 Mock／Test 標籤。完整 Apple Maps／Google Maps 座標連結可直接進入探索；需要網路重導向的短連結會明確回報尚未支援。
+
