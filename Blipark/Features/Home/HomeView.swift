@@ -2,6 +2,8 @@ import SwiftUI
 
 struct HomeView: View {
   @Environment(\.appEnvironment) private var environment
+  @State private var plans: [ParkingPlan] = []
+  @State private var errorMessage: String?
   let onShowPlans: () -> Void
 
   var body: some View {
@@ -18,13 +20,22 @@ struct HomeView: View {
               .font(.subheadline)
           }
 
-          BliparkEmptyState(
-            title: "還沒有停車計畫",
-            message: "搜尋目的地，開始規劃附近的停車方式。",
-            symbol: "calendar.badge.plus"
-          )
-          .frame(minHeight: 180)
-          .bliparkCard()
+          if let nextPlan = plans.first {
+            NavigationLink {
+              PlanDetailView(plan: nextPlan)
+            } label: {
+              PlanCard(plan: nextPlan)
+            }
+            .buttonStyle(.plain)
+          } else {
+            BliparkEmptyState(
+              title: "還沒有停車計畫",
+              message: "搜尋目的地，開始規劃附近的停車方式。",
+              symbol: "calendar.badge.plus"
+            )
+            .frame(minHeight: 180)
+            .bliparkCard()
+          }
         }
 
         VStack(alignment: .leading, spacing: 12) {
@@ -53,6 +64,13 @@ struct HomeView: View {
     }
     .background(Color(.systemGroupedBackground))
     .navigationBarHidden(true)
+    .task { await loadPlans() }
+    .onAppear { Task { await loadPlans() } }
+    .alert("無法讀取計畫", isPresented: errorBinding) {
+      Button("好") { errorMessage = nil }
+    } message: {
+      Text(errorMessage ?? "未知錯誤")
+    }
   }
 
   private var brandHeader: some View {
@@ -65,6 +83,18 @@ struct HomeView: View {
       Spacer()
     }
     .accessibilityElement(children: .combine)
+  }
+
+  private var errorBinding: Binding<Bool> {
+    Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })
+  }
+
+  private func loadPlans() async {
+    do {
+      plans = ParkingPlanSorter.sorted(try await environment.plans.plans())
+    } catch {
+      errorMessage = error.localizedDescription
+    }
   }
 }
 

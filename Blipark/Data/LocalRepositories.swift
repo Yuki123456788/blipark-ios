@@ -76,9 +76,9 @@ actor LocalTestDatasetRepository: TestDatasetRepository {
     store = JSONFileStore(fileURL: directory.appendingPathComponent("test-datasets-v1.json"))
     encoder = JSONEncoder()
     encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-    encoder.dateEncodingStrategy = .iso8601
+    encoder.dateEncodingStrategy = .secondsSince1970
     decoder = JSONDecoder()
-    decoder.dateDecodingStrategy = .iso8601
+    decoder.dateDecodingStrategy = .secondsSince1970
   }
 
   func datasets(includeDisabled: Bool) async throws -> [TestDataset] {

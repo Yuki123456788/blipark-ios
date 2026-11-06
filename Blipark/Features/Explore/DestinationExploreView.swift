@@ -2,9 +2,12 @@ import MapKit
 import SwiftUI
 
 struct DestinationExploreView: View {
+  @Environment(\.appEnvironment) private var environment
   @StateObject private var model: DestinationExploreModel
   @State private var camera: MapCameraPosition
   @State private var detailItem: ExploredParkingLocation?
+  @State private var showsPlanComposer = false
+  @State private var savedPlanName: String?
 
   init(destination: Destination, parkingProvider: any ParkingDataProviding) {
     _model = StateObject(
@@ -33,11 +36,41 @@ struct DestinationExploreView: View {
     .navigationBarTitleDisplayMode(.inline)
     .task { await model.load(); fitAllLocations() }
     .sheet(item: $detailItem) { ParkingLocationDetailView(item: $0) }
+    .sheet(isPresented: $showsPlanComposer) {
+      PlanComposerView(
+        destination: model.destination,
+        knownLocations: model.locations.map(\.location),
+        parkingProvider: environment.parkingData,
+        preferencesRepository: environment.preferences,
+        planRepository: environment.plans
+      ) { plan in
+        savedPlanName = plan.name
+      }
+    }
+    .safeAreaInset(edge: .bottom) {
+      if !model.locations.isEmpty {
+        Button {
+          showsPlanComposer = true
+        } label: {
+          Label("設定策略並儲存計畫", systemImage: "bookmark.fill")
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.borderedProminent)
+        .controlSize(.large)
+        .padding()
+        .background(.regularMaterial)
+      }
+    }
     .alert("無法取得停車資料", isPresented: errorBinding) {
       Button("重試") { Task { await model.load() } }
       Button("取消", role: .cancel) { model.errorMessage = nil }
     } message: {
       Text(model.errorMessage ?? "未知錯誤")
+    }
+    .alert("計畫已儲存", isPresented: savedBinding) {
+      Button("好") { savedPlanName = nil }
+    } message: {
+      Text("「\(savedPlanName ?? "停車計畫")」已加入計畫列表與首頁。")
     }
   }
 
@@ -140,6 +173,10 @@ struct DestinationExploreView: View {
 
   private var errorBinding: Binding<Bool> {
     Binding(get: { model.errorMessage != nil }, set: { if !$0 { model.errorMessage = nil } })
+  }
+
+  private var savedBinding: Binding<Bool> {
+    Binding(get: { savedPlanName != nil }, set: { if !$0 { savedPlanName = nil } })
   }
 
   private func fitAllLocations() {

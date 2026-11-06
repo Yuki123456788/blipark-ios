@@ -6,9 +6,11 @@ struct ProfileView: View {
   var body: some View {
     List {
       Section("偏好") {
-        Label("預設車種", systemImage: "car")
-        Label("停車偏好", systemImage: "slider.horizontal.3")
-        Label("觸發距離", systemImage: "scope")
+        NavigationLink {
+          GeneralSettingsView(repository: environment.preferences)
+        } label: {
+          Label("App 設定", systemImage: "gearshape")
+        }
       }
 
       Section("App") {

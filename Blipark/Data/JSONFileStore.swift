@@ -9,9 +9,9 @@ actor JSONFileStore<Value: Codable & Sendable> {
     self.fileURL = fileURL
     encoder = JSONEncoder()
     encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-    encoder.dateEncodingStrategy = .iso8601
+    encoder.dateEncodingStrategy = .secondsSince1970
     decoder = JSONDecoder()
-    decoder.dateDecodingStrategy = .iso8601
+    decoder.dateDecodingStrategy = .secondsSince1970
   }
 
   func load(or fallback: @autoclosure () -> Value) throws -> Value {

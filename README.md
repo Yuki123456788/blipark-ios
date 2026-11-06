@@ -27,5 +27,19 @@ App 的正式畫面只依賴 `DestinationSearchProviding`、`ParkingDataProvidin
 
 一般 MapKit 搜尋結果也會顯示，但如果沒有對應 parking provider 資料，探索頁會呈現誠實的 empty state，不會合成停車點。
 
+## 驗證 Phase 1–4 使用流程
+
+```text
+Debug 開發者工具建立情境
+→ 首頁搜尋目的地
+→ 地圖／清單檢視候選
+→ 設定車種、類型、收費與直線距離
+→ 增刪並拖曳候選順序
+→ 儲存 Plan
+→ 首頁或 Plans Tab 查看與再次編輯
+```
+
+Plan 會保存候選 snapshot 與手動順序。之後修改或刪除 TestDataset 不會讓既有 Plan crash，也不會偷偷覆蓋使用者的內容。
+
 完整架構與資料邊界請見 [`docs/architecture.md`](docs/architecture.md)，產品實作計畫請見 [`plan/firstPlan.md`](plan/firstPlan.md)。
 

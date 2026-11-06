@@ -30,5 +30,11 @@ Debug build 可從「我的 → 開發者工具」建立、編輯、啟用、停
 
 導航實測參數另存於 `developer-navigation-v1.json`。依目前決策，預設使用 5×5 圖磚、80 公尺固定觀察距離與 PiP controls style 2；這些設定不會出現在一般使用者操作介面。
 
-正式搜尋會先查詢啟用的 TestDataset，再補上 MapKit 一般地點結果並依名稱與座標去重。測試目的地的 UUID 是持久化識別；正式畫面不顯示 Mock／Test 標籤。完整 Apple Maps／Google Maps 座標連結可直接進入探索；需要網路重導向的短連結會明確回報尚未支援。
+Debug build 的正式搜尋會先查詢啟用的 TestDataset，再補上 MapKit 一般地點結果並依名稱與座標去重。測試目的地的 UUID 是持久化識別；正式畫面不顯示 Mock／Test 標籤。Release build 不掛載 TestDataset provider，在正式 API 尚未接入時只提供一般地點搜尋與誠實的無停車資料狀態。完整 Apple Maps／Google Maps 座標連結可直接進入探索；需要網路重導向的短連結會明確回報尚未支援。
+
+## 推薦與 Plan
+
+`ParkingRecommendationService` 先排除不支援車種、類型或直線距離上限的資料，再依免費偏好、距離與 UUID 穩定排序。未知費率不視為免費；畫面也不把直線距離稱為步行距離。
+
+建立 Plan 時先套用全域預設策略，使用者可在儲存前覆寫並手動調整候選順序。`ParkingPlan` 保存 destination 與候選 snapshot；TestDataset 後續更新或刪除不會自動改寫個人計畫。導覽 Session 與 POC adapter 屬於 Phase 5，Phase 1–4 不宣稱已完成 PiP 或背景導航。
 
