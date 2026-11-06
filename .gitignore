@@ -1,0 +1,7 @@
+DerivedData/
+*.xcuserstate
+xcuserdata/
+dist/
+.DS_Store
+
+plan/
