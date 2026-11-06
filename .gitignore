@@ -4,4 +4,20 @@ xcuserdata/
 dist/
 .DS_Store
 
-plan/
+# Xcode
+DerivedData/
+build/
+*.xcuserstate
+xcuserdata/
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+
+# Local exports and user data
+exports/
+*.ipa
+
+# macOS
+.DS_Store
