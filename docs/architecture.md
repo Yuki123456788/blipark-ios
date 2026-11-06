@@ -24,3 +24,9 @@ SwiftUI View → Feature Model / Use Case → Repository Protocol → Local JSON
 
 PiP／真實定位導航會在後續整合階段透過 adapter 接收 `ParkingGuidanceSession`，而不是讓 domain model 依賴 POC renderer 型別。
 
+## 開發資料
+
+Debug build 可從「我的 → 開發者工具」建立、編輯、啟用、停用或刪除 `TestDataset`。目的地與停車點可用 MapKit 搜尋、地圖點選或手動座標設定；資料會保存於 `test-datasets-v1.json`。JSON 匯入會先驗證 schema、ID、座標、車種與格位數，任何錯誤都不覆蓋既有資料。
+
+導航實測參數另存於 `developer-navigation-v1.json`。依目前決策，預設使用 5×5 圖磚、80 公尺固定觀察距離與 PiP controls style 2；這些設定不會出現在一般使用者操作介面。
+

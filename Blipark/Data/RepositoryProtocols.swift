@@ -28,6 +28,20 @@ protocol GuidanceSessionRepository: Sendable {
   func clearActiveSession() async throws
 }
 
+protocol TestDatasetRepository: Sendable {
+  func datasets(includeDisabled: Bool) async throws -> [TestDataset]
+  func dataset(id: UUID) async throws -> TestDataset?
+  func save(_ dataset: TestDataset) async throws
+  func delete(id: UUID) async throws
+  func exportArchive() async throws -> Data
+  func importArchive(_ data: Data) async throws
+}
+
+protocol DeveloperSettingsRepository: Sendable {
+  func settings() async throws -> DeveloperNavigationSettings
+  func save(_ settings: DeveloperNavigationSettings) async throws
+}
+
 enum RepositoryError: LocalizedError, Equatable {
   case invalidData(String)
   case notFound
