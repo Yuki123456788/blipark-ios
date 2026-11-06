@@ -149,19 +149,28 @@ struct TestDatasetDestinationSearchProvider: DestinationSearchProviding {
 
   func searchDestinations(matching query: String) async throws -> [Destination] {
     let normalized = query.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !normalized.isEmpty else { return [] }
-    return try await repository.datasets(includeDisabled: false)
-      .map(\.destination)
-      .filter {
+    let datasets = try await repository.datasets(includeDisabled: false)
+    let destinations = datasets.flatMap { dataset in
+      [dataset.destination] + dataset.parkingLocations.compactMap { location in
+        guard let coordinate = location.coordinate else { return nil }
+        return Destination(
+          id: location.id,
+          name: location.name,
+          address: location.address,
+          coordinate: coordinate,
+          sourceReference: "local-test-parking:\(dataset.id.uuidString)"
+        )
+      }
+    }
+    guard !normalized.isEmpty else { return destinations }
+    return destinations.filter {
         $0.name.localizedStandardContains(normalized)
           || ($0.address?.localizedStandardContains(normalized) == true)
       }
   }
 
   func destination(id: UUID) async throws -> Destination? {
-    try await repository.datasets(includeDisabled: false)
-      .map(\.destination)
-      .first { $0.id == id }
+    try await searchDestinations(matching: "").first { $0.id == id }
   }
 }
 
@@ -169,9 +178,13 @@ struct TestDatasetParkingDataProvider: ParkingDataProviding {
   let repository: any TestDatasetRepository
 
   func parkingLocations(near destination: Destination) async throws -> [ParkingLocation] {
-    try await repository.datasets(includeDisabled: false)
-      .first { $0.destination.id == destination.id }?
-      .parkingLocations ?? []
+    let dataset = try await repository.datasets(includeDisabled: false).first {
+      $0.destination.id == destination.id || $0.parkingLocations.contains { $0.id == destination.id }
+    }
+    return dataset?.parkingLocations.filter { location in
+      guard let coordinate = location.coordinate else { return false }
+      return ParkingSelectionCoverage.contains(coordinate, centeredAt: destination.coordinate)
+    } ?? []
   }
 
   func parkingLocation(id: UUID) async throws -> ParkingLocation? {

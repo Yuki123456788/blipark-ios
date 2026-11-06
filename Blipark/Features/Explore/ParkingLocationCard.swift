@@ -29,9 +29,9 @@ struct ParkingLocationCard: View {
         }
       }
       Spacer(minLength: 4)
-      Image(systemName: "chevron.right")
-        .font(.caption)
-        .foregroundStyle(.tertiary)
+      Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+        .font(.title3)
+        .foregroundStyle(isSelected ? BliparkStyle.brand : Color.secondary.opacity(0.45))
     }
     .padding(14)
     .background(.background, in: RoundedRectangle(cornerRadius: 16))

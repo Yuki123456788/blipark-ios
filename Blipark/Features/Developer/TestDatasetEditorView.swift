@@ -15,6 +15,7 @@ struct TestDatasetEditorView: View {
   @State private var notes: String
   @State private var isEnabled: Bool
   @State private var parkingLocations: [ParkingLocation]
+  @State private var destinationMapLink = ""
   @State private var showsDestinationMap = false
   @State private var showsParkingEditor = false
   @State private var editingParkingLocation: ParkingLocation?
@@ -53,6 +54,18 @@ struct TestDatasetEditorView: View {
         }
 
         Section {
+          MapLinkImportField(link: $destinationMapLink) { imported in
+            destinationName = imported.name
+            destinationAddress = imported.address ?? ""
+            destinationCoordinate = imported.coordinate
+          }
+        } header: {
+          Text("從地圖連結匯入")
+        } footer: {
+          Text("貼上 Apple Maps 或 Google Maps 地點連結後會自動辨識並帶入名稱、地址與座標；短連結需要網路。")
+        }
+
+        Section {
           if parkingLocations.isEmpty {
             Text("尚未加入停車點")
               .foregroundStyle(.secondary)
@@ -73,17 +86,12 @@ struct TestDatasetEditorView: View {
               .buttonStyle(.plain)
             }
             .onDelete { parkingLocations.remove(atOffsets: $0) }
-            .onMove { parkingLocations.move(fromOffsets: $0, toOffset: $1) }
           }
           Button("新增停車點", systemImage: "plus") { showsParkingEditor = true }
         } header: {
-          HStack {
-            Text("附近停車點")
-            Spacer()
-            if parkingLocations.count > 1 { EditButton().textCase(nil) }
-          }
+          Text("附近停車點")
         } footer: {
-          Text("這些資料模擬未來 API 的回應，不會自動建立使用者計畫。")
+          Text("停車點只會平列顯示，不代表推薦或候選順序，且必須位於目的地周圍 4 × 4 公里內。")
         }
 
         Section("情境") {
@@ -100,6 +108,17 @@ struct TestDatasetEditorView: View {
         ToolbarItem(placement: .confirmationAction) {
           Button("儲存") { save() }
             .disabled(isSaving)
+        }
+        ToolbarItemGroup(placement: .keyboard) {
+          Spacer()
+          Button("完成") {
+            UIApplication.shared.sendAction(
+              #selector(UIResponder.resignFirstResponder),
+              to: nil,
+              from: nil,
+              for: nil
+            )
+          }
         }
       }
       .sheet(isPresented: $showsDestinationMap) {

@@ -4,6 +4,7 @@ struct ParkingLocationEditorView: View {
   @Environment(\.dismiss) private var dismiss
 
   private let id: UUID
+  private let center: GeoCoordinate
   private let onSave: (ParkingLocation) -> Void
 
   @State private var name: String
@@ -15,6 +16,7 @@ struct ParkingLocationEditorView: View {
   @State private var charge: ParkingCharge
   @State private var pricingSummary: String
   @State private var notes: String
+  @State private var mapLink = ""
   @State private var showsMap = false
   @State private var errorMessage: String?
 
@@ -24,6 +26,7 @@ struct ParkingLocationEditorView: View {
     onSave: @escaping (ParkingLocation) -> Void
   ) {
     id = location?.id ?? UUID()
+    self.center = center
     self.onSave = onSave
     _name = State(initialValue: location?.name ?? "")
     _address = State(initialValue: location?.address ?? "")
@@ -50,6 +53,22 @@ struct ParkingLocationEditorView: View {
             .font(.caption).foregroundStyle(.secondary)
         }
 
+        Section {
+          MapLinkImportField(link: $mapLink) { imported in
+            guard ParkingSelectionCoverage.contains(imported.coordinate, centeredAt: center) else {
+              errorMessage = "匯入位置超出目的地周圍 4 × 4 公里的選取範圍。"
+              return
+            }
+            name = imported.name
+            address = imported.address ?? ""
+            coordinate = imported.coordinate
+          }
+        } header: {
+          Text("從地圖連結匯入")
+        } footer: {
+          Text("支援 Apple Maps 與 Google Maps 完整連結及短連結。")
+        }
+
         Section("支援車種") {
           ForEach(VehicleType.allCases) { vehicle in
             Toggle(vehicle.title, isOn: vehicleBinding(vehicle))
@@ -71,13 +90,25 @@ struct ParkingLocationEditorView: View {
       .toolbar {
         ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
         ToolbarItem(placement: .confirmationAction) { Button("加入") { save() } }
+        ToolbarItemGroup(placement: .keyboard) {
+          Spacer()
+          Button("完成") {
+            UIApplication.shared.sendAction(
+              #selector(UIResponder.resignFirstResponder),
+              to: nil,
+              from: nil,
+              for: nil
+            )
+          }
+        }
       }
       .sheet(isPresented: $showsMap) {
         MapLocationPicker(
           title: "選擇停車位置",
           name: name,
           address: address.nilIfBlank,
-          coordinate: coordinate
+          coordinate: coordinate,
+          coverageCenter: center
         ) { selectedName, selectedAddress, selectedCoordinate in
           if !selectedName.isEmpty { name = selectedName }
           if let selectedAddress { address = selectedAddress }
@@ -112,6 +143,10 @@ struct ParkingLocationEditorView: View {
     }
     guard coordinate.isValid else {
       errorMessage = "座標超出合法範圍。"
+      return
+    }
+    guard ParkingSelectionCoverage.contains(coordinate, centeredAt: center) else {
+      errorMessage = "停車點必須位於目的地周圍 4 × 4 公里的選取範圍內。"
       return
     }
     guard !vehicles.isEmpty else {

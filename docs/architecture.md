@@ -26,15 +26,17 @@ PiP／真實定位導航會在後續整合階段透過 adapter 接收 `ParkingGu
 
 ## 開發資料
 
-Debug build 可從「我的 → 開發者工具」建立、編輯、啟用、停用或刪除 `TestDataset`。目的地與停車點可用 MapKit 搜尋、地圖點選或手動座標設定；資料會保存於 `test-datasets-v1.json`。JSON 匯入會先驗證 schema、ID、座標、車種與格位數，任何錯誤都不覆蓋既有資料。
+Debug build 可從「我的 → 開發者工具」建立、編輯、啟用、停用或刪除 `TestDataset`。目的地與停車點可貼上 Apple Maps／Google Maps 連結自動帶入，也可用 MapKit 搜尋、地圖點選或手動座標設定；資料會保存於 `test-datasets-v1.json`。停車點必須落在以目的地為中心的 4,000 × 4,000 公尺 MapKit 投影方框內。JSON 匯入與手動儲存都會驗證 schema、ID、座標、範圍、車種與格位數，任何錯誤都不覆蓋既有資料。
 
 導航實測參數另存於 `developer-navigation-v1.json`。依目前決策，預設使用 5×5 圖磚、80 公尺固定觀察距離與 PiP controls style 2；這些設定不會出現在一般使用者操作介面。
 
-Debug build 的正式搜尋會先查詢啟用的 TestDataset，再補上 MapKit 一般地點結果並依名稱與座標去重。測試目的地的 UUID 是持久化識別；正式畫面不顯示 Mock／Test 標籤。Release build 不掛載 TestDataset provider，在正式 API 尚未接入時只提供一般地點搜尋與誠實的無停車資料狀態。完整 Apple Maps／Google Maps 座標連結可直接進入探索；需要網路重導向的短連結會明確回報尚未支援。
+Debug build 的正式搜尋只查詢啟用的 TestDataset。搜尋框取得焦點時直接列出情境目的地與所有停車點，再以本機文字篩選；一般流程不呼叫 MapKit autocomplete 或地點搜尋。選取目的地或停車點後，parking provider 以該點為中心再次套用 4,000 × 4,000 公尺方框，只回傳範圍內的停車點。正式畫面不顯示 Mock／Test 標籤。Release build 不掛載 TestDataset provider，在正式 API 尚未接入時呈現誠實的無資料狀態。
+
+Apple Maps／Google Maps 連結匯入只存在於開發者資料編輯器。完整連結直接解析座標，短連結經網路展開；只有地點文字而沒有座標時，才在這個開發工具流程使用 MapKit 解析。
 
 ## 推薦與 Plan
 
-`ParkingRecommendationService` 先排除不支援車種、類型或直線距離上限的資料，再依免費偏好、距離與 UUID 穩定排序。未知費率不視為免費；畫面也不把直線距離稱為步行距離。
+目前探索頁保留 provider 的資料順序，不預選、不推薦，也不依距離或名稱重新排序。使用者在平列清單中手動選擇停車點，地圖只標示目前選擇。建立 Plan 時仍載入全域預設策略並允許儲存前覆寫，但不會根據策略自動改變已選停車點。
 
-建立 Plan 時先套用全域預設策略，使用者可在儲存前覆寫並手動調整候選順序。`ParkingPlan` 保存 destination 與候選 snapshot；TestDataset 後續更新或刪除不會自動改寫個人計畫。導覽 Session 與 POC adapter 屬於 Phase 5，Phase 1–4 不宣稱已完成 PiP 或背景導航。
+`ParkingPlan` 保存 destination 與候選 snapshot；TestDataset 後續更新或刪除不會自動改寫個人計畫。`ParkingRecommendationService` 保留供後續推薦功能使用，目前一般建立流程不呼叫它。導覽 Session 與 POC adapter 屬於 Phase 5，Phase 1–4 不宣稱已完成 PiP 或背景導航。
 

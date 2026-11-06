@@ -8,6 +8,7 @@ struct PlanComposerView: View {
   init(
     destination: Destination,
     knownLocations: [ParkingLocation],
+    initiallySelectedLocationIDs: [UUID] = [],
     existingPlan: ParkingPlan? = nil,
     parkingProvider: any ParkingDataProviding,
     preferencesRepository: any PreferencesRepository,
@@ -18,6 +19,7 @@ struct PlanComposerView: View {
       wrappedValue: PlanComposerModel(
         destination: destination,
         knownLocations: knownLocations,
+        initiallySelectedLocationIDs: initiallySelectedLocationIDs,
         existingPlan: existingPlan,
         parkingProvider: parkingProvider,
         preferencesRepository: preferencesRepository,
@@ -90,16 +92,10 @@ struct PlanComposerView: View {
         Text("直線 1,200 m 內").tag(Optional(1_200.0))
         Text("不限").tag(Optional<Double>.none)
       }
-      Picker("推薦排序", selection: $model.strategy.sortingPreference) {
-        ForEach(ParkingSortingPreference.allCases) { Text($0.title).tag($0) }
-      }
-      Button("依目前策略重新推薦", systemImage: "arrow.triangle.2.circlepath") {
-        withAnimation { model.applyRecommendation() }
-      }
     } header: {
       Text("本次停車策略")
     } footer: {
-      Text("距離限制使用直線距離，不代表實際步行距離。重新推薦會重設下方手動順序。")
+      Text("目前保留偏好設定，但不會自動套用推薦或改變下方停車點。")
     }
   }
 
@@ -108,13 +104,10 @@ struct PlanComposerView: View {
       if model.selectedLocations.isEmpty {
         Text("尚未選擇候選停車點").foregroundStyle(.secondary)
       } else {
-        ForEach(Array(model.selectedLocations.enumerated()), id: \.element.id) { index, location in
+        ForEach(model.selectedLocations) { location in
           HStack {
-            Text("\(index + 1)")
-              .font(.caption.bold())
-              .foregroundStyle(.white)
-              .frame(width: 24, height: 24)
-              .background(BliparkStyle.brand, in: Circle())
+            Image(systemName: "checkmark.circle.fill")
+              .foregroundStyle(BliparkStyle.brand)
             VStack(alignment: .leading) {
               Text(location.name)
               Text(distanceText(location)).font(.caption).foregroundStyle(.secondary)
@@ -122,16 +115,11 @@ struct PlanComposerView: View {
           }
         }
         .onDelete(perform: model.remove)
-        .onMove(perform: model.move)
       }
     } header: {
-      HStack {
-        Text("候選順序")
-        Spacer()
-        if model.selectedLocations.count > 1 { EditButton().textCase(nil) }
-      }
+      Text("已選停車點")
     } footer: {
-      Text("拖曳後的手動順序會原樣保存，不會再被推薦排序覆蓋。")
+      Text("這裡不代表推薦排名或引導順序。")
     }
   }
 

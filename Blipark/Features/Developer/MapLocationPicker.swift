@@ -9,8 +9,10 @@ struct MapLocationPicker: View {
   @State private var selectedName: String
   @State private var selectedAddress: String?
   @State private var camera: MapCameraPosition
+  @State private var selectionError: String?
 
   let title: String
+  let coverageCenter: GeoCoordinate?
   let onSelect: (String, String?, GeoCoordinate) -> Void
 
   init(
@@ -18,9 +20,11 @@ struct MapLocationPicker: View {
     name: String,
     address: String?,
     coordinate: GeoCoordinate,
+    coverageCenter: GeoCoordinate? = nil,
     onSelect: @escaping (String, String?, GeoCoordinate) -> Void
   ) {
     self.title = title
+    self.coverageCenter = coverageCenter
     _selection = State(initialValue: coordinate)
     _selectedName = State(initialValue: name)
     _selectedAddress = State(initialValue: address)
@@ -28,8 +32,8 @@ struct MapLocationPicker: View {
       initialValue: .region(
         MKCoordinateRegion(
           center: coordinate.clLocationCoordinate,
-          latitudinalMeters: 2_000,
-          longitudinalMeters: 2_000
+          latitudinalMeters: coverageCenter == nil ? 2_000 : 5_000,
+          longitudinalMeters: coverageCenter == nil ? 2_000 : 5_000
         )
       )
     )
@@ -42,6 +46,13 @@ struct MapLocationPicker: View {
         searchPanel
         MapReader { proxy in
           Map(position: $camera) {
+            if let coverageCenter {
+              MapPolyline(coordinates: ParkingSelectionCoverage.boundaryCoordinates(centeredAt: coverageCenter))
+                .stroke(
+                  BliparkStyle.brand,
+                  style: StrokeStyle(lineWidth: 2, dash: [7, 5])
+                )
+            }
             Marker(selectedName.isEmpty ? "選取位置" : selectedName, coordinate: selection.clLocationCoordinate)
               .tint(BliparkStyle.brand)
           }
@@ -51,8 +62,14 @@ struct MapLocationPicker: View {
           }
           .onTapGesture { point in
             guard let coordinate = proxy.convert(point, from: .local) else { return }
-            selection = GeoCoordinate(latitude: coordinate.latitude, longitude: coordinate.longitude)
+            let value = GeoCoordinate(latitude: coordinate.latitude, longitude: coordinate.longitude)
+            guard isInsideCoverage(value) else {
+              selectionError = "停車點必須位於目的地周圍 4 × 4 公里的方框內。"
+              return
+            }
+            selection = value
             selectedAddress = nil
+            selectionError = nil
           }
         }
       }
@@ -63,12 +80,19 @@ struct MapLocationPicker: View {
           Text(selectedAddress ?? coordinateText)
             .font(.caption)
             .foregroundStyle(.secondary)
+          if let selectionError {
+            Text(selectionError).font(.caption).foregroundStyle(.red)
+          } else if coverageCenter != nil {
+            Text("虛線範圍為目的地周圍 4 × 4 公里")
+              .font(.caption).foregroundStyle(.secondary)
+          }
           Button("使用這個位置") {
             onSelect(selectedName, selectedAddress, selection)
             dismiss()
           }
           .buttonStyle(.borderedProminent)
           .frame(maxWidth: .infinity, alignment: .trailing)
+          .disabled(!isInsideCoverage(selection))
         }
         .padding()
         .background(.regularMaterial)
@@ -78,6 +102,17 @@ struct MapLocationPicker: View {
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
           Button("取消") { dismiss() }
+        }
+        ToolbarItemGroup(placement: .keyboard) {
+          Spacer()
+          Button("完成") {
+            UIApplication.shared.sendAction(
+              #selector(UIResponder.resignFirstResponder),
+              to: nil,
+              from: nil,
+              for: nil
+            )
+          }
         }
       }
     }
@@ -100,9 +135,14 @@ struct MapLocationPicker: View {
           HStack {
             ForEach(searchModel.results) { result in
               Button {
+                guard isInsideCoverage(result.coordinate) else {
+                  selectionError = "這個地點超出目的地周圍 4 × 4 公里的方框。"
+                  return
+                }
                 selectedName = result.name
                 selectedAddress = result.address
                 selection = result.coordinate
+                selectionError = nil
                 camera = .region(
                   MKCoordinateRegion(
                     center: result.coordinate.clLocationCoordinate,
@@ -131,6 +171,11 @@ struct MapLocationPicker: View {
 
   private var coordinateText: String {
     String(format: "%.6f, %.6f", selection.latitude, selection.longitude)
+  }
+
+  private func isInsideCoverage(_ coordinate: GeoCoordinate) -> Bool {
+    guard let coverageCenter else { return true }
+    return ParkingSelectionCoverage.contains(coordinate, centeredAt: coverageCenter)
   }
 }
 

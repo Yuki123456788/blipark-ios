@@ -67,6 +67,12 @@ enum TestDatasetValidator {
       guard let coordinate = location.coordinate, coordinate.isValid else {
         throw RepositoryError.invalidData("「\(location.name)」的座標超出合法範圍。")
       }
+      guard ParkingSelectionCoverage.contains(
+        coordinate,
+        centeredAt: dataset.destination.coordinate
+      ) else {
+        throw RepositoryError.invalidData("「\(location.name)」超出目的地周圍 4 × 4 公里的選取範圍。")
+      }
       if let count = location.totalSpaceCount, count < 0 {
         throw RepositoryError.invalidData("「\(location.name)」的總格位數不可小於 0。")
       }

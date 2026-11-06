@@ -20,26 +20,26 @@ App 的正式畫面只依賴 `DestinationSearchProviding`、`ParkingDataProvidin
 ## 建立可搜尋的開發資料
 
 1. 使用 Debug build 開啟「我的 → 開發者工具」。
-2. 新增測試情境，利用 MapKit 搜尋或地圖點選設定目的地。
-3. 加入多個附近停車點；未知格位或費率請留白／選「未知」。
-4. 儲存後回到首頁搜尋目的地名稱。
-5. 選取目的地即可在地圖與清單查看候選；距離明確標示為直線約略距離。
+2. 新增測試情境，可貼上 Apple Maps／Google Maps 連結自動帶入位置，或使用 MapKit、地圖點選與手動座標。
+3. 加入目的地周圍 4 × 4 公里方框內的停車點；未知格位或費率請留白／選「未知」。
+4. 儲存後回到首頁進入搜尋；輸入框取得焦點時會直接列出所有已啟用的目的地與停車點。
+5. 選取任一地點後，從平列清單手動選擇停車點；地圖只標示目前選擇，不會自動推薦或排序。
 
-一般 MapKit 搜尋結果也會顯示，但如果沒有對應 parking provider 資料，探索頁會呈現誠實的 empty state，不會合成停車點。
+正式搜尋頁不呼叫 MapKit 地點搜尋或 autocomplete。MapKit 只保留在開發者資料編輯器中，協助建立測試位置；Release build 在正式 API 接入前會呈現誠實的 empty state。
 
 ## 驗證 Phase 1–4 使用流程
 
 ```text
 Debug 開發者工具建立情境
 → 首頁搜尋目的地
-→ 地圖／清單檢視候選
+→ 從 4 × 4 公里範圍內的平列清單手動選擇停車點
 → 設定車種、類型、收費與直線距離
-→ 增刪並拖曳候選順序
+→ 確認已選停車點（目前不套用推薦或排序）
 → 儲存 Plan
 → 首頁或 Plans Tab 查看與再次編輯
 ```
 
-Plan 會保存候選 snapshot 與手動順序。之後修改或刪除 TestDataset 不會讓既有 Plan crash，也不會偷偷覆蓋使用者的內容。
+Plan 會保存候選 snapshot。之後修改或刪除 TestDataset 不會讓既有 Plan crash，也不會偷偷覆蓋使用者的內容。
 
 完整架構與資料邊界請見 [`docs/architecture.md`](docs/architecture.md)，產品實作計畫請見 [`plan/firstPlan.md`](plan/firstPlan.md)。
 

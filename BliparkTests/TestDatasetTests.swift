@@ -17,6 +17,61 @@ final class TestDatasetTests: XCTestCase {
     XCTAssertThrowsError(try TestDatasetValidator.validate(dataset))
   }
 
+  func testValidatorRejectsParkingOutsideFourKilometerSquare() {
+    let dataset = makeDataset(
+      locations: [
+        ParkingLocation(
+          name: "範圍外停車場",
+          type: .parkingLot,
+          coordinate: GeoCoordinate(latitude: 23.0200, longitude: 120.1996)
+        )
+      ]
+    )
+
+    XCTAssertThrowsError(try TestDatasetValidator.validate(dataset))
+  }
+
+  func testSearchProviderReturnsDestinationsAndParkingForEmptyQuery() async throws {
+    let directory = temporaryDirectory()
+    let repository = LocalTestDatasetRepository(directory: directory)
+    let dataset = makeDataset()
+    try await repository.save(dataset)
+    let provider = TestDatasetDestinationSearchProvider(repository: repository)
+
+    let results = try await provider.searchDestinations(matching: "")
+
+    XCTAssertEqual(results.map(\.name), ["臺南美術館", "美術館停車場"])
+    XCTAssertTrue(results[1].sourceReference?.hasPrefix("local-test-parking:") == true)
+  }
+
+  func testParkingProviderUsesSelectedPointAsCoverageCenter() async throws {
+    let directory = temporaryDirectory()
+    let repository = LocalTestDatasetRepository(directory: directory)
+    let selected = ParkingLocation(
+      name: "選取停車點",
+      type: .parkingLot,
+      coordinate: coordinate
+    )
+    let nearby = ParkingLocation(
+      name: "附近停車點",
+      type: .onStreet,
+      coordinate: GeoCoordinate(latitude: 22.9950, longitude: 120.1996)
+    )
+    let dataset = makeDataset(locations: [selected, nearby])
+    try await repository.save(dataset)
+    let provider = TestDatasetParkingDataProvider(repository: repository)
+    let selectedAsDestination = Destination(
+      id: selected.id,
+      name: selected.name,
+      coordinate: try XCTUnwrap(selected.coordinate),
+      sourceReference: "local-test-parking:\(dataset.id.uuidString)"
+    )
+
+    let results = try await provider.parkingLocations(near: selectedAsDestination)
+
+    XCTAssertEqual(results.map(\.name), ["選取停車點", "附近停車點"])
+  }
+
   func testRepositoryPersistsDataset() async throws {
     let directory = temporaryDirectory()
     let repository = LocalTestDatasetRepository(directory: directory)
@@ -26,7 +81,9 @@ final class TestDatasetTests: XCTestCase {
 
     let reloaded = LocalTestDatasetRepository(directory: directory)
     let values = try await reloaded.datasets(includeDisabled: true)
-    XCTAssertEqual(values, [dataset])
+    XCTAssertEqual(values.map(\.id), [dataset.id])
+    XCTAssertEqual(values.first?.destination, dataset.destination)
+    XCTAssertEqual(values.first?.parkingLocations, dataset.parkingLocations)
   }
 
   func testImportRejectsExistingDatasetIDWithoutOverwriting() async throws {
@@ -44,7 +101,9 @@ final class TestDatasetTests: XCTestCase {
       XCTFail("Expected duplicate IDs to be rejected")
     } catch {
       let remaining = try await existingRepository.datasets(includeDisabled: true)
-      XCTAssertEqual(remaining, [dataset])
+      XCTAssertEqual(remaining.map(\.id), [dataset.id])
+      XCTAssertEqual(remaining.first?.destination, dataset.destination)
+      XCTAssertEqual(remaining.first?.parkingLocations, dataset.parkingLocations)
     }
   }
 

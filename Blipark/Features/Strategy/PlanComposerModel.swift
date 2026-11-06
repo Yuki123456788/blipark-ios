@@ -17,12 +17,12 @@ final class PlanComposerModel: ObservableObject {
   private let parkingProvider: any ParkingDataProviding
   private let preferencesRepository: any PreferencesRepository
   private let planRepository: any PlanRepository
-  private let recommendationService = ParkingRecommendationService()
   private var globalStrategy = ParkingStrategy.standard
 
   init(
     destination: Destination,
     knownLocations: [ParkingLocation],
+    initiallySelectedLocationIDs: [UUID] = [],
     existingPlan: ParkingPlan? = nil,
     parkingProvider: any ParkingDataProviding,
     preferencesRepository: any PreferencesRepository,
@@ -38,15 +38,16 @@ final class PlanComposerModel: ObservableObject {
     hasScheduledDeparture = existingPlan?.scheduledDepartureAt != nil
     scheduledDepartureAt = existingPlan?.scheduledDepartureAt ?? .now.addingTimeInterval(3_600)
 
-    var merged = Dictionary(uniqueKeysWithValues: knownLocations.map { ($0.id, $0) })
+    var merged = knownLocations
+    selectedLocationIDs = initiallySelectedLocationIDs
     if let existingPlan {
       for snapshot in existingPlan.candidates {
         let location = snapshot.parkingLocation
-        merged[location.id] = location
+        if !merged.contains(where: { $0.id == location.id }) { merged.append(location) }
       }
       selectedLocationIDs = existingPlan.candidates.map { $0.sourceParkingLocationID ?? $0.id }
     }
-    availableLocations = Array(merged.values)
+    availableLocations = merged
   }
 
   var selectedLocations: [ParkingLocation] {
@@ -56,9 +57,7 @@ final class PlanComposerModel: ObservableObject {
 
   var unselectedLocations: [ParkingLocation] {
     let selected = Set(selectedLocationIDs)
-    return availableLocations
-      .filter { !selected.contains($0.id) }
-      .sorted { distance(for: $0) < distance(for: $1) }
+    return availableLocations.filter { !selected.contains($0.id) }
   }
 
   var usesGlobalStrategy: Bool { strategy == globalStrategy }
@@ -70,22 +69,13 @@ final class PlanComposerModel: ObservableObject {
       if existingPlan == nil { strategy = globalStrategy }
 
       let currentLocations = try await parkingProvider.parkingLocations(near: destination)
-      var merged = Dictionary(uniqueKeysWithValues: currentLocations.map { ($0.id, $0) })
-      for location in availableLocations { merged[location.id] = location }
-      availableLocations = Array(merged.values)
-
-      if existingPlan == nil { applyRecommendation() }
+      for location in currentLocations where !availableLocations.contains(where: { $0.id == location.id }) {
+        availableLocations.append(location)
+      }
     } catch {
       errorMessage = error.localizedDescription
-      if existingPlan == nil { applyRecommendation() }
     }
     isLoading = false
-  }
-
-  func applyRecommendation() {
-    selectedLocationIDs = recommendationService
-      .recommend(availableLocations, near: destination, using: strategy)
-      .map(\.id)
   }
 
   func add(_ location: ParkingLocation) {
@@ -95,10 +85,6 @@ final class PlanComposerModel: ObservableObject {
 
   func remove(at offsets: IndexSet) {
     selectedLocationIDs.remove(atOffsets: offsets)
-  }
-
-  func move(from offsets: IndexSet, to destination: Int) {
-    selectedLocationIDs.move(fromOffsets: offsets, toOffset: destination)
   }
 
   func distance(for location: ParkingLocation) -> Double {

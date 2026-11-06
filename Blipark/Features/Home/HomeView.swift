@@ -47,7 +47,7 @@ struct HomeView: View {
               parkingProvider: environment.parkingData
             )
           } label: {
-            Label("搜尋地點、地址或貼上連結", systemImage: "magnifyingglass")
+            Label("從已建立的測試地點中選擇", systemImage: "magnifyingglass")
               .foregroundStyle(.secondary)
               .frame(maxWidth: .infinity, alignment: .leading)
               .padding(16)

@@ -28,7 +28,6 @@ struct DestinationExploreView: View {
     VStack(spacing: 0) {
       parkingMap
         .frame(height: 300)
-      controls
       content
     }
     .background(Color(.systemGroupedBackground))
@@ -40,6 +39,7 @@ struct DestinationExploreView: View {
       PlanComposerView(
         destination: model.destination,
         knownLocations: model.locations.map(\.location),
+        initiallySelectedLocationIDs: model.selectedID.map { [$0] } ?? [],
         parkingProvider: environment.parkingData,
         preferencesRepository: environment.preferences,
         planRepository: environment.plans
@@ -52,11 +52,15 @@ struct DestinationExploreView: View {
         Button {
           showsPlanComposer = true
         } label: {
-          Label("設定策略並儲存計畫", systemImage: "bookmark.fill")
+          Label(
+            model.selectedID == nil ? "請先選擇停車點" : "使用這個停車點繼續",
+            systemImage: "checkmark.circle.fill"
+          )
             .frame(maxWidth: .infinity)
         }
         .buttonStyle(.borderedProminent)
         .controlSize(.large)
+        .disabled(model.selectedID == nil)
         .padding()
         .background(.regularMaterial)
       }
@@ -76,55 +80,31 @@ struct DestinationExploreView: View {
 
   private var parkingMap: some View {
     Map(position: $camera, selection: $model.selectedID) {
+      MapPolyline(
+        coordinates: ParkingSelectionCoverage.boundaryCoordinates(
+          centeredAt: model.destination.coordinate
+        )
+      )
+      .stroke(
+        BliparkStyle.brand.opacity(0.8),
+        style: StrokeStyle(lineWidth: 2, dash: [7, 5])
+      )
       Marker(model.destination.name, systemImage: "flag.fill", coordinate: model.destination.coordinate.clLocationCoordinate)
         .tint(.red)
-      ForEach(model.locations) { item in
-        if let coordinate = item.location.coordinate {
-          Marker(
-            item.location.name,
-            systemImage: item.location.type.symbolName,
-            coordinate: coordinate.clLocationCoordinate
-          )
-          .tint(BliparkStyle.brand)
-          .tag(item.id)
-        }
+      if let selected = model.item(id: model.selectedID), let coordinate = selected.location.coordinate {
+        Marker(
+          selected.location.name,
+          systemImage: selected.location.type.symbolName,
+          coordinate: coordinate.clLocationCoordinate
+        )
+        .tint(BliparkStyle.brand)
+        .tag(selected.id)
       }
     }
     .mapControls {
       MapCompass()
       MapScaleView()
     }
-    .onChange(of: model.selectedID) { _, id in
-      guard let coordinate = model.item(id: id)?.location.coordinate else { return }
-      withAnimation {
-        camera = .region(
-          MKCoordinateRegion(
-            center: coordinate.clLocationCoordinate,
-            latitudinalMeters: 900,
-            longitudinalMeters: 900
-          )
-        )
-      }
-    }
-  }
-
-  private var controls: some View {
-    HStack {
-      Picker("類型", selection: $model.filter) {
-        ForEach(ParkingListFilter.allCases) { Text($0.title).tag($0) }
-      }
-      .pickerStyle(.segmented)
-
-      Menu {
-        Picker("排序", selection: $model.sort) {
-          ForEach(ParkingListSort.allCases) { Text($0.title).tag($0) }
-        }
-      } label: {
-        Label(model.sort.title, systemImage: "arrow.up.arrow.down")
-      }
-    }
-    .padding()
-    .background(.bar)
   }
 
   @ViewBuilder
@@ -144,7 +124,7 @@ struct DestinationExploreView: View {
         ScrollView {
           LazyVStack(spacing: 10) {
             HStack {
-              Text("候選停車點")
+              Text("選擇停車點")
                 .font(.headline)
               Spacer()
               Text("\(model.visibleLocations.count) 個")
@@ -153,11 +133,13 @@ struct DestinationExploreView: View {
             ForEach(model.visibleLocations) { item in
               Button {
                 model.selectedID = item.id
-                detailItem = item
               } label: {
                 ParkingLocationCard(item: item, isSelected: model.selectedID == item.id)
               }
               .buttonStyle(.plain)
+              .contextMenu {
+                Button("查看詳細資料", systemImage: "info.circle") { detailItem = item }
+              }
               .id(item.id)
             }
           }
@@ -180,21 +162,13 @@ struct DestinationExploreView: View {
   }
 
   private func fitAllLocations() {
-    let coordinates = [model.destination.coordinate] + model.locations.compactMap(\.location.coordinate)
-    guard let minLatitude = coordinates.map(\.latitude).min(),
-      let maxLatitude = coordinates.map(\.latitude).max(),
-      let minLongitude = coordinates.map(\.longitude).min(),
-      let maxLongitude = coordinates.map(\.longitude).max()
-    else { return }
-    let center = CLLocationCoordinate2D(
-      latitude: (minLatitude + maxLatitude) / 2,
-      longitude: (minLongitude + maxLongitude) / 2
+    camera = .region(
+      MKCoordinateRegion(
+        center: model.destination.coordinate.clLocationCoordinate,
+        latitudinalMeters: 5_000,
+        longitudinalMeters: 5_000
+      )
     )
-    let span = MKCoordinateSpan(
-      latitudeDelta: max((maxLatitude - minLatitude) * 1.5, 0.008),
-      longitudeDelta: max((maxLongitude - minLongitude) * 1.5, 0.008)
-    )
-    camera = .region(MKCoordinateRegion(center: center, span: span))
   }
 }
 

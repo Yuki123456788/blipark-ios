@@ -2,6 +2,7 @@ import Foundation
 
 @MainActor
 final class DestinationSearchModel: ObservableObject {
+  @Published private(set) var allResults: [Destination] = []
   @Published private(set) var results: [Destination] = []
   @Published private(set) var isSearching = false
   @Published var errorMessage: String?
@@ -12,42 +13,31 @@ final class DestinationSearchModel: ObservableObject {
     self.provider = provider
   }
 
-  func search(_ query: String) async {
-    let normalized = query.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !normalized.isEmpty else {
-      results = []
-      errorMessage = nil
-      return
-    }
-
-    do {
-      if let linkedDestination = try ExternalMapLinkParser.parse(normalized) {
-        results = [linkedDestination]
-        errorMessage = nil
-        return
-      }
-    } catch {
-      results = []
-      errorMessage = error.localizedDescription
-      return
-    }
-
-    guard normalized.count >= 2 else {
-      results = []
-      errorMessage = nil
-      return
-    }
-
+  func load() async {
     isSearching = true
     errorMessage = nil
     defer { isSearching = false }
     do {
-      results = try await provider.searchDestinations(matching: normalized)
+      allResults = try await provider.searchDestinations(matching: "")
+      results = allResults
     } catch is CancellationError {
       return
     } catch {
+      allResults = []
       results = []
-      errorMessage = "搜尋失敗：\(error.localizedDescription)"
+      errorMessage = "讀取測試地點失敗：\(error.localizedDescription)"
+    }
+  }
+
+  func filter(_ query: String) {
+    let normalized = query.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !normalized.isEmpty else {
+      results = allResults
+      return
+    }
+    results = allResults.filter {
+      $0.name.localizedStandardContains(normalized)
+        || ($0.address?.localizedStandardContains(normalized) == true)
     }
   }
 }
