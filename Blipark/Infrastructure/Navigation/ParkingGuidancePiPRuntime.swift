@@ -1,3 +1,4 @@
+import AVFoundation
 import Combine
 import Foundation
 
@@ -21,7 +22,12 @@ final class ParkingGuidancePiPRuntime: ObservableObject {
   }
 
   @Published private(set) var statusMessage = "PiP 尚未啟動"
+  @Published private(set) var diagnosticMessage = "尚未準備 PiP preview"
   @Published private(set) var isActive = false
+
+  var previewDisplayLayer: AVSampleBufferDisplayLayer {
+    manager.contentSource.displayLayer
+  }
 
   private let manager = PiPManager()
   private let coordinator = PiPRealNavigationCoordinator()
@@ -37,6 +43,10 @@ final class ParkingGuidancePiPRuntime: ObservableObject {
     manager.$isActive
       .removeDuplicates()
       .sink { [weak self] active in self?.isActive = active }
+      .store(in: &observers)
+    manager.$diagnosticMessage
+      .removeDuplicates()
+      .sink { [weak self] message in self?.diagnosticMessage = message }
       .store(in: &observers)
   }
 
@@ -147,7 +157,10 @@ final class ParkingGuidancePiPRuntime: ObservableObject {
     guard let continuation = launchContinuation else { return }
     launchContinuation = nil
     launchObservers.removeAll()
-    continuation.resume(throwing: RuntimeError.failed(message))
+    let diagnostic = manager.lastError ?? manager.diagnosticMessage
+    let details = diagnostic.isEmpty || message.contains(diagnostic)
+      ? message : "\(message)\n\(diagnostic)"
+    continuation.resume(throwing: RuntimeError.failed(details))
   }
 
   private func cancelPendingLaunch() {

@@ -20,7 +20,10 @@ struct DepartureConfirmationView: View {
         VStack(alignment: .leading, spacing: 22) {
           tripSummary
           modeSelection
-          if usesExternalMap { mapProviderSelection }
+          if usesExternalMap {
+            mapProviderSelection
+            if isStarting { pipPreview }
+          }
         }
         .padding()
       }
@@ -116,6 +119,28 @@ struct DepartureConfirmationView: View {
         }
       }
       .pickerStyle(.segmented)
+    }
+    .padding(16)
+    .background(.background, in: RoundedRectangle(cornerRadius: 16))
+  }
+
+  private var pipPreview: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      HStack {
+        Label("PiP 內容預覽", systemImage: "pip")
+          .font(.headline)
+        Spacer()
+        ProgressView()
+      }
+      PiPPreviewView(displayLayer: pipRuntime.previewDisplayLayer)
+        .frame(maxWidth: .infinity)
+        .frame(height: 64)
+        .background(.black)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .accessibilityLabel("PiP 內容預覽")
+      Text(pipRuntime.diagnosticMessage)
+        .font(.caption)
+        .foregroundStyle(.secondary)
     }
     .padding(16)
     .background(.background, in: RoundedRectangle(cornerRadius: 16))
