@@ -4,6 +4,7 @@ struct DepartureConfirmationView: View {
   @Environment(\.appEnvironment) private var environment
   @Environment(\.dismiss) private var dismiss
   @Environment(\.openURL) private var openURL
+  @EnvironmentObject private var pipRuntime: ParkingGuidancePiPRuntime
 
   let plan: ParkingPlan
   let onStarted: (ParkingGuidanceSession) -> Void
@@ -29,22 +30,31 @@ struct DepartureConfirmationView: View {
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
           Button("關閉") { dismiss() }
+            .disabled(isStarting)
         }
       }
       .safeAreaInset(edge: .bottom) {
-        Button {
-          Task { await startTrip() }
-        } label: {
-          if isStarting {
-            ProgressView().frame(maxWidth: .infinity)
-          } else {
-            Label(startButtonTitle, systemImage: "play.fill")
-              .frame(maxWidth: .infinity)
+        VStack(spacing: 8) {
+          if isStarting, usesExternalMap {
+            Text(pipRuntime.statusMessage)
+              .font(.footnote)
+              .foregroundStyle(.secondary)
+              .multilineTextAlignment(.center)
           }
+          Button {
+            Task { await startTrip() }
+          } label: {
+            if isStarting {
+              ProgressView().frame(maxWidth: .infinity)
+            } else {
+              Label(startButtonTitle, systemImage: "play.fill")
+                .frame(maxWidth: .infinity)
+            }
+          }
+          .buttonStyle(.borderedProminent)
+          .controlSize(.large)
+          .disabled(isStarting || plan.candidates.isEmpty)
         }
-        .buttonStyle(.borderedProminent)
-        .controlSize(.large)
-        .disabled(isStarting || plan.candidates.isEmpty)
         .padding()
         .background(.regularMaterial)
       }
@@ -80,7 +90,7 @@ struct DepartureConfirmationView: View {
       Text("這次要怎麼使用？").font(.headline)
       selectionCard(
         title: "搭配地圖導航",
-        message: "由外部地圖前往目的地，Blipark 保留停車候選與行程狀態。",
+        message: "先啟動 Blipark PiP 停車引導，再由外部地圖前往目的地。",
         symbol: "map",
         isSelected: usesExternalMap
       ) {
@@ -154,12 +164,37 @@ struct DepartureConfirmationView: View {
     let mode: GuidanceMode = usesExternalMap
       ? .externalMaps(provider: externalMapProvider)
       : .bliparkOnly
-    let session = GuidanceSessionLaunch.makeSession(from: plan, mode: mode)
+    var session = GuidanceSessionLaunch.makeSession(from: plan, mode: mode)
+    if usesExternalMap { session.status = .preparing }
     var didSaveSession = false
 
     do {
+      let externalURL = usesExternalMap
+        ? GuidanceSessionLaunch.externalMapURL(
+          provider: externalMapProvider,
+          destination: plan.destination
+        )
+        : nil
+      if usesExternalMap, externalURL == nil {
+        throw GuidanceLaunchError.invalidExternalMapURL
+      }
+
       try await environment.guidanceSessions.save(session)
       didSaveSession = true
+
+      if usesExternalMap {
+        async let settings = environment.developerSettings.settings()
+        async let preferences = environment.preferences.preferences()
+        try await pipRuntime.start(
+          session: session,
+          settings: settings,
+          triggerDistanceMeters: preferences.guidanceTriggerDistanceMeters
+        )
+        session.status = .active
+        session.updatedAt = .now
+        try await environment.guidanceSessions.save(session)
+      }
+
       var usedPlan = plan
       usedPlan.lastUsedAt = session.startedAt
       try await environment.plans.save(usedPlan)
@@ -168,15 +203,11 @@ struct DepartureConfirmationView: View {
       await Task.yield()
       onStarted(session)
 
-      if usesExternalMap,
-        let url = GuidanceSessionLaunch.externalMapURL(
-          provider: externalMapProvider,
-          destination: plan.destination
-        )
-      {
+      if let url = externalURL {
         openURL(url)
       }
     } catch {
+      pipRuntime.stop()
       if didSaveSession {
         try? await environment.guidanceSessions.clearActiveSession()
       }
@@ -186,5 +217,13 @@ struct DepartureConfirmationView: View {
 
   private var errorBinding: Binding<Bool> {
     Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })
+  }
+}
+
+private enum GuidanceLaunchError: LocalizedError {
+  case invalidExternalMapURL
+
+  var errorDescription: String? {
+    "無法建立外部地圖導航連結。"
   }
 }

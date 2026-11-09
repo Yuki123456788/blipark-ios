@@ -5,6 +5,7 @@ struct GuidanceSessionView: View {
   @Environment(\.appEnvironment) private var environment
   @Environment(\.dismiss) private var dismiss
   @Environment(\.openURL) private var openURL
+  @EnvironmentObject private var pipRuntime: ParkingGuidancePiPRuntime
 
   @State private var session: ParkingGuidanceSession
   @State private var showsEndConfirmation = false
@@ -202,6 +203,7 @@ struct GuidanceSessionView: View {
   @MainActor
   private func endTrip() async {
     do {
+      pipRuntime.stop()
       try await environment.guidanceSessions.clearActiveSession()
       onEnded()
       dismiss()
