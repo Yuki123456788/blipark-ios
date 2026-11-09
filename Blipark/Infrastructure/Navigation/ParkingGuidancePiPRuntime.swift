@@ -24,6 +24,7 @@ final class ParkingGuidancePiPRuntime: ObservableObject {
   @Published private(set) var statusMessage = "PiP 尚未啟動"
   @Published private(set) var diagnosticMessage = "尚未準備 PiP preview"
   @Published private(set) var isActive = false
+  @Published private(set) var previewAspectRatio: CGFloat = 8
 
   var previewDisplayLayer: AVSampleBufferDisplayLayer {
     manager.contentSource.displayLayer
@@ -47,6 +48,11 @@ final class ParkingGuidancePiPRuntime: ObservableObject {
     manager.$diagnosticMessage
       .removeDuplicates()
       .sink { [weak self] message in self?.diagnosticMessage = message }
+      .store(in: &observers)
+    manager.$configuration
+      .map(\.aspectRatio)
+      .removeDuplicates()
+      .sink { [weak self] ratio in self?.previewAspectRatio = ratio }
       .store(in: &observers)
   }
 
@@ -89,6 +95,37 @@ final class ParkingGuidancePiPRuntime: ObservableObject {
       manager.stop()
     }
     isActive = false
+  }
+
+  func resume(
+    session: ParkingGuidanceSession,
+    settings: DeveloperNavigationSettings,
+    triggerDistanceMeters: Double
+  ) async throws {
+    guard manager.status != .unsupported else { throw RuntimeError.unsupported }
+    if manager.isActive { return }
+
+    guard coordinator.isSessionRunning else {
+      try await start(
+        session: session,
+        settings: settings,
+        triggerDistanceMeters: triggerDistanceMeters
+      )
+      return
+    }
+
+    try await withTaskCancellationHandler {
+      try await withCheckedThrowingContinuation { continuation in
+        launchContinuation = continuation
+        observeLaunchResult()
+        manager.refreshReadiness()
+        Task { @MainActor [weak self] in
+          await self?.requestPiPResumeWhenReady()
+        }
+      }
+    } onCancel: {
+      Task { @MainActor [weak self] in self?.cancelPendingLaunch() }
+    }
   }
 
   private func apply(
@@ -144,6 +181,23 @@ final class ParkingGuidancePiPRuntime: ObservableObject {
         failLaunch(coordinator.lastError ?? "PiP 啟動失敗。")
       }
       .store(in: &launchObservers)
+  }
+
+  private func requestPiPResumeWhenReady() async {
+    for _ in 0..<24 {
+      guard launchContinuation != nil else { return }
+      if manager.isActive {
+        finishLaunch()
+        return
+      }
+      if manager.isPreviewReady, manager.isPossible {
+        manager.startFromUserAction()
+        statusMessage = "已要求重新啟動 PiP，等待系統確認。"
+        return
+      }
+      try? await Task.sleep(for: .milliseconds(250))
+    }
+    failLaunch("PiP 尚未恢復可啟動狀態，請確認沒有其他 App 正在使用 PiP 後再試。")
   }
 
   private func finishLaunch() {

@@ -75,9 +75,7 @@ struct PlanDetailView: View {
     }
     .sheet(isPresented: $showsDepartureConfirmation) {
       DepartureConfirmationView(plan: plan) { session in
-        if case .bliparkOnly = session.mode {
-          presentedSession = session
-        }
+        presentedSession = session
       }
     }
     .fullScreenCover(item: $presentedSession) { session in

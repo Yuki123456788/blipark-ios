@@ -9,6 +9,7 @@ struct GuidanceSessionView: View {
 
   @State private var session: ParkingGuidanceSession
   @State private var showsEndConfirmation = false
+  @State private var isResumingPiP = false
   @State private var errorMessage: String?
   let onEnded: () -> Void
 
@@ -29,14 +30,7 @@ struct GuidanceSessionView: View {
           candidateProgress
 
           if case .externalMaps(let provider) = session.mode {
-            Button {
-              openExternalMap(provider)
-            } label: {
-              Label("再次開啟 \(provider.title)", systemImage: provider.symbolName)
-                .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
+            externalMapControls(provider)
           }
         }
         .padding()
@@ -74,12 +68,61 @@ struct GuidanceSessionView: View {
       } message: {
         Text("結束後會清除進行中的引導，但已儲存的計畫仍會保留。")
       }
-      .alert("無法更新行程", isPresented: errorBinding) {
+      .alert("無法繼續引導", isPresented: errorBinding) {
         Button("好") { errorMessage = nil }
       } message: {
         Text(errorMessage ?? "未知錯誤")
       }
     }
+  }
+
+  private func externalMapControls(_ provider: ExternalMapProvider) -> some View {
+    VStack(alignment: .leading, spacing: 12) {
+      Label(
+        pipRuntime.isActive ? "PiP 引導顯示中" : "PiP 引導目前已關閉",
+        systemImage: pipRuntime.isActive ? "pip.fill" : "pip.remove"
+      )
+      .font(.headline)
+      .foregroundStyle(pipRuntime.isActive ? Color.green : Color.orange)
+
+      if !pipRuntime.isActive {
+        PiPPreviewView(displayLayer: pipRuntime.previewDisplayLayer)
+          .frame(maxWidth: .infinity)
+          .frame(height: pipRuntime.previewAspectRatio >= 4 ? 64 : 180)
+          .background(.black)
+          .clipShape(RoundedRectangle(cornerRadius: 12))
+          .accessibilityLabel("PiP 內容預覽")
+
+        Text(pipRuntime.diagnosticMessage)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
+
+      Button {
+        if pipRuntime.isActive {
+          openExternalMap(provider)
+        } else {
+          Task { await resumePiPAndOpenMap(provider) }
+        }
+      } label: {
+        if isResumingPiP {
+          ProgressView().frame(maxWidth: .infinity)
+        } else {
+          Label(
+            pipRuntime.isActive
+              ? "返回 \(provider.title)"
+              : "重新開啟 PiP 並返回 \(provider.title)",
+            systemImage: pipRuntime.isActive ? provider.symbolName : "pip.enter"
+          )
+          .frame(maxWidth: .infinity)
+        }
+      }
+      .buttonStyle(.borderedProminent)
+      .controlSize(.large)
+      .disabled(isResumingPiP)
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .bliparkCard()
   }
 
   private var guidanceMap: some View {
@@ -218,6 +261,25 @@ struct GuidanceSessionView: View {
       destination: session.destination
     ) else { return }
     openURL(url)
+  }
+
+  @MainActor
+  private func resumePiPAndOpenMap(_ provider: ExternalMapProvider) async {
+    isResumingPiP = true
+    defer { isResumingPiP = false }
+
+    do {
+      async let settings = environment.developerSettings.settings()
+      async let preferences = environment.preferences.preferences()
+      try await pipRuntime.resume(
+        session: session,
+        settings: settings,
+        triggerDistanceMeters: preferences.guidanceTriggerDistanceMeters
+      )
+      openExternalMap(provider)
+    } catch {
+      errorMessage = error.localizedDescription
+    }
   }
 
   private var errorBinding: Binding<Bool> {

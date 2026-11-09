@@ -405,6 +405,12 @@ final class PiPManager: NSObject, ObservableObject {
     automationTask = nil
   }
 
+  func refreshReadiness() {
+    controller?.invalidatePlaybackState()
+    synchronizeControllerState()
+    probeReadiness()
+  }
+
   private func deactivateAudioSession() {
     audioSessionController.deactivate { [weak self] error in
       guard let error else { return }

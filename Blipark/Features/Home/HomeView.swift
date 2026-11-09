@@ -88,9 +88,7 @@ struct HomeView: View {
     .sheet(item: $planToStart) { plan in
       DepartureConfirmationView(plan: plan) { session in
         activeSession = session
-        if case .bliparkOnly = session.mode {
-          presentedSession = session
-        }
+        presentedSession = session
       }
     }
     .fullScreenCover(item: $presentedSession, onDismiss: {

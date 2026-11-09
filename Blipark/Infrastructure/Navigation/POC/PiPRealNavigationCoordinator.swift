@@ -195,9 +195,15 @@ final class PiPRealNavigationCoordinator: ObservableObject {
         guard let self else { return }
         if active {
           didActivatePiP = true
-          if state == .preparingSession { enterStandbyAndOpenMaps() }
+          if state == .preparingSession {
+            enterStandbyAndOpenMaps()
+          } else if isSessionRunning {
+            statusMessage = state == .navigating
+              ? "PiP 已重新啟動，正在引導目前的停車候選。"
+              : "PiP 已重新啟動，持續監控與目的地的距離。"
+          }
         } else if didActivatePiP, isSessionRunning, !isEnding {
-          endSession(message: "PiP 已由使用者或系統關閉，本次測試已結束。")
+          statusMessage = "PiP 已關閉；導航仍在進行，可回到 Blipark 重新開啟。"
         }
       }
       .store(in: &subscriptions)

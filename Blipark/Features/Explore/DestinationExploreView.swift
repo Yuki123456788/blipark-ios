@@ -57,9 +57,7 @@ struct DestinationExploreView: View {
     }
     .sheet(item: $planToStart) { plan in
       DepartureConfirmationView(plan: plan) { session in
-        if case .bliparkOnly = session.mode {
-          presentedSession = session
-        }
+        presentedSession = session
       }
     }
     .fullScreenCover(item: $presentedSession) { session in
