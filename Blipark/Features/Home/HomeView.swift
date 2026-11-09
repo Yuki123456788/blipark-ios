@@ -3,6 +3,9 @@ import SwiftUI
 struct HomeView: View {
   @Environment(\.appEnvironment) private var environment
   @State private var plans: [ParkingPlan] = []
+  @State private var activeSession: ParkingGuidanceSession?
+  @State private var planToStart: ParkingPlan?
+  @State private var presentedSession: ParkingGuidanceSession?
   @State private var errorMessage: String?
   let onShowPlans: () -> Void
 
@@ -10,6 +13,10 @@ struct HomeView: View {
     ScrollView {
       VStack(alignment: .leading, spacing: 24) {
         brandHeader
+
+        if let activeSession {
+          activeTripCard(activeSession)
+        }
 
         VStack(alignment: .leading, spacing: 12) {
           HStack {
@@ -21,12 +28,24 @@ struct HomeView: View {
           }
 
           if let nextPlan = plans.first {
-            NavigationLink {
-              PlanDetailView(plan: nextPlan)
-            } label: {
-              PlanCard(plan: nextPlan)
+            VStack(spacing: 14) {
+              NavigationLink {
+                PlanDetailView(plan: nextPlan)
+              } label: {
+                PlanCard(plan: nextPlan, usesCardContainer: false)
+              }
+              .buttonStyle(.plain)
+
+              Button {
+                planToStart = nextPlan
+              } label: {
+                Label("開始計畫", systemImage: "play.circle.fill")
+                  .frame(maxWidth: .infinity)
+              }
+              .buttonStyle(.borderedProminent)
+              .controlSize(.large)
             }
-            .buttonStyle(.plain)
+            .bliparkCard()
           } else {
             BliparkEmptyState(
               title: "還沒有停車計畫",
@@ -66,6 +85,22 @@ struct HomeView: View {
     .navigationBarHidden(true)
     .task { await loadPlans() }
     .onAppear { Task { await loadPlans() } }
+    .sheet(item: $planToStart) { plan in
+      DepartureConfirmationView(plan: plan) { session in
+        activeSession = session
+        if case .bliparkOnly = session.mode {
+          presentedSession = session
+        }
+      }
+    }
+    .fullScreenCover(item: $presentedSession, onDismiss: {
+      Task { await loadActiveSession() }
+    }) { session in
+      GuidanceSessionView(session: session) {
+        activeSession = nil
+        presentedSession = nil
+      }
+    }
     .alert("無法讀取計畫", isPresented: errorBinding) {
       Button("好") { errorMessage = nil }
     } message: {
@@ -85,6 +120,30 @@ struct HomeView: View {
     .accessibilityElement(children: .combine)
   }
 
+  private func activeTripCard(_ session: ParkingGuidanceSession) -> some View {
+    VStack(alignment: .leading, spacing: 12) {
+      Label("進行中的行程", systemImage: "location.fill.viewfinder")
+        .font(.headline)
+        .foregroundStyle(BliparkStyle.brand)
+      Text(session.destination.name)
+        .font(.title3.bold())
+      if let candidate = session.currentCandidate {
+        Text("目前候選：\(candidate.name)")
+          .font(.subheadline)
+          .foregroundStyle(.secondary)
+      }
+      Button {
+        presentedSession = session
+      } label: {
+        Label("繼續停車引導", systemImage: "arrow.right.circle.fill")
+          .frame(maxWidth: .infinity)
+      }
+      .buttonStyle(.borderedProminent)
+      .controlSize(.large)
+    }
+    .bliparkCard()
+  }
+
   private var errorBinding: Binding<Bool> {
     Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })
   }
@@ -92,6 +151,15 @@ struct HomeView: View {
   private func loadPlans() async {
     do {
       plans = ParkingPlanSorter.sorted(try await environment.plans.plans())
+      await loadActiveSession()
+    } catch {
+      errorMessage = error.localizedDescription
+    }
+  }
+
+  private func loadActiveSession() async {
+    do {
+      activeSession = try await environment.guidanceSessions.activeSession()
     } catch {
       errorMessage = error.localizedDescription
     }

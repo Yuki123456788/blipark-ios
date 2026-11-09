@@ -80,6 +80,59 @@ final class ParkingPlanTests: XCTestCase {
     XCTAssertEqual(ParkingPlanSorter.sorted([recent, future], now: now).map(\.name), ["未來", "最近修改"])
   }
 
+  func testGuidanceSessionStartsFromPlanWithoutChangingCandidateOrder() {
+    let destination = Destination(name: "目的地", coordinate: coordinate)
+    let first = ParkingCandidateSnapshot(
+      location: location(name: "第一站", charge: .paid, latitudeOffset: 0.001)
+    )
+    let second = ParkingCandidateSnapshot(
+      location: location(name: "第二站", charge: .free, latitudeOffset: 0.002)
+    )
+    let source = ParkingPlan(
+      name: "出發測試",
+      destination: destination,
+      vehicleType: .car,
+      candidates: [first, second],
+      strategy: .standard,
+      usesGlobalStrategy: true
+    )
+    let now = Date(timeIntervalSince1970: 1_234_567)
+
+    let session = GuidanceSessionLaunch.makeSession(
+      from: source,
+      mode: .bliparkOnly,
+      now: now
+    )
+
+    XCTAssertEqual(session.sourcePlanID, source.id)
+    XCTAssertEqual(session.orderedCandidates.map(\.id), [first.id, second.id])
+    XCTAssertEqual(session.currentCandidateIndex, 0)
+    XCTAssertEqual(session.status, .active)
+    XCTAssertEqual(session.startedAt, now)
+  }
+
+  func testExternalMapURLsUseDestinationCoordinatesForDrivingDirections() throws {
+    let destination = Destination(name: "目的地", coordinate: coordinate)
+    let appleURL = try XCTUnwrap(
+      GuidanceSessionLaunch.externalMapURL(provider: .appleMaps, destination: destination)
+    )
+    let googleURL = try XCTUnwrap(
+      GuidanceSessionLaunch.externalMapURL(provider: .googleMaps, destination: destination)
+    )
+
+    let appleComponents = try XCTUnwrap(URLComponents(url: appleURL, resolvingAgainstBaseURL: false))
+    let googleComponents = try XCTUnwrap(URLComponents(url: googleURL, resolvingAgainstBaseURL: false))
+    let appleQuery = Dictionary(uniqueKeysWithValues: (appleComponents.queryItems ?? []).map { ($0.name, $0.value) })
+    let googleQuery = Dictionary(uniqueKeysWithValues: (googleComponents.queryItems ?? []).map { ($0.name, $0.value) })
+
+    XCTAssertEqual(appleComponents.host, "maps.apple.com")
+    XCTAssertEqual(appleQuery["daddr"]!, "22.9908,120.1996")
+    XCTAssertEqual(appleQuery["dirflg"]!, "d")
+    XCTAssertEqual(googleComponents.host, "www.google.com")
+    XCTAssertEqual(googleQuery["destination"]!, "22.9908,120.1996")
+    XCTAssertEqual(googleQuery["travelmode"]!, "driving")
+  }
+
   private var coordinate: GeoCoordinate {
     GeoCoordinate(latitude: 22.9908, longitude: 120.1996)
   }

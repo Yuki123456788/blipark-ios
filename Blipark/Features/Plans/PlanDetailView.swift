@@ -5,6 +5,8 @@ struct PlanDetailView: View {
   @Environment(\.appEnvironment) private var environment
   @State private var plan: ParkingPlan
   @State private var showsEditor = false
+  @State private var showsDepartureConfirmation = false
+  @State private var presentedSession: ParkingGuidanceSession?
 
   init(plan: ParkingPlan) {
     _plan = State(initialValue: plan)
@@ -53,11 +55,6 @@ struct PlanDetailView: View {
         }
       }
 
-      Section {
-        Label("開始引導與 PiP 會在導航整合階段接上；此計畫資料已可直接交給 Session adapter。", systemImage: "info.circle")
-          .font(.footnote)
-          .foregroundStyle(.secondary)
-      }
     }
     .navigationTitle(plan.name)
     .navigationBarTitleDisplayMode(.inline)
@@ -75,6 +72,31 @@ struct PlanDetailView: View {
       ) { updated in
         plan = updated
       }
+    }
+    .sheet(isPresented: $showsDepartureConfirmation) {
+      DepartureConfirmationView(plan: plan) { session in
+        if case .bliparkOnly = session.mode {
+          presentedSession = session
+        }
+      }
+    }
+    .fullScreenCover(item: $presentedSession) { session in
+      GuidanceSessionView(session: session) {
+        presentedSession = nil
+      }
+    }
+    .safeAreaInset(edge: .bottom) {
+      Button {
+        showsDepartureConfirmation = true
+      } label: {
+        Label("開始這個行程", systemImage: "play.circle.fill")
+          .frame(maxWidth: .infinity)
+      }
+      .buttonStyle(.borderedProminent)
+      .controlSize(.large)
+      .disabled(plan.candidates.isEmpty)
+      .padding()
+      .background(.regularMaterial)
     }
   }
 

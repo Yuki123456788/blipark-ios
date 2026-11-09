@@ -7,7 +7,9 @@ struct DestinationExploreView: View {
   @State private var camera: MapCameraPosition
   @State private var detailItem: ExploredParkingLocation?
   @State private var showsPlanComposer = false
-  @State private var savedPlanName: String?
+  @State private var savedPlan: ParkingPlan?
+  @State private var planToStart: ParkingPlan?
+  @State private var presentedSession: ParkingGuidanceSession?
 
   init(destination: Destination, parkingProvider: any ParkingDataProviding) {
     _model = StateObject(
@@ -50,7 +52,19 @@ struct DestinationExploreView: View {
         preferencesRepository: environment.preferences,
         planRepository: environment.plans
       ) { plan in
-        savedPlanName = plan.name
+        savedPlan = plan
+      }
+    }
+    .sheet(item: $planToStart) { plan in
+      DepartureConfirmationView(plan: plan) { session in
+        if case .bliparkOnly = session.mode {
+          presentedSession = session
+        }
+      }
+    }
+    .fullScreenCover(item: $presentedSession) { session in
+      GuidanceSessionView(session: session) {
+        presentedSession = nil
       }
     }
     .safeAreaInset(edge: .bottom) {
@@ -82,9 +96,17 @@ struct DestinationExploreView: View {
       Text(model.errorMessage ?? "未知錯誤")
     }
     .alert("計畫已儲存", isPresented: savedBinding) {
-      Button("好") { savedPlanName = nil }
+      Button("開始行程") {
+        let plan = savedPlan
+        savedPlan = nil
+        Task { @MainActor in
+          await Task.yield()
+          planToStart = plan
+        }
+      }
+      Button("稍後", role: .cancel) { savedPlan = nil }
     } message: {
-      Text("「\(savedPlanName ?? "停車計畫")」已加入計畫列表與首頁。")
+      Text("「\(savedPlan?.name ?? "停車計畫")」已加入計畫列表與首頁。")
     }
   }
 
@@ -337,7 +359,7 @@ struct DestinationExploreView: View {
   }
 
   private var savedBinding: Binding<Bool> {
-    Binding(get: { savedPlanName != nil }, set: { if !$0 { savedPlanName = nil } })
+    Binding(get: { savedPlan != nil }, set: { if !$0 { savedPlan = nil } })
   }
 
   private func fitExplorationArea() {

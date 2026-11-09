@@ -2,8 +2,17 @@ import SwiftUI
 
 struct PlanCard: View {
   let plan: ParkingPlan
+  var usesCardContainer = true
 
   var body: some View {
+    if usesCardContainer {
+      content.bliparkCard()
+    } else {
+      content
+    }
+  }
+
+  private var content: some View {
     VStack(alignment: .leading, spacing: 12) {
       HStack(alignment: .top) {
         Image(systemName: "mappin.and.ellipse")
@@ -34,7 +43,6 @@ struct PlanCard: View {
           .font(.subheadline.weight(.medium))
       }
     }
-    .bliparkCard()
   }
 }
 
